@@ -1,0 +1,14 @@
+<?php
+
+namespace App\Controllers;
+
+use Zero\Lib\Http\Request;
+use Zero\Lib\Http\Response;
+
+class {{ class }}
+{
+    public function index(Request $request): Response
+    {
+        return Response::html('Controller {{ class }} ready.');
+    }
+}

@@ -1,0 +1,11 @@
+vendor
+node_modules
+.env
+.env.production
+.env.development
+.env.local
+.env.test
+.env.staging
+.DS_Store
+.cache
+sqlite

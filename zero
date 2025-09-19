@@ -1,0 +1,36 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$_ENV['BASE_PATH'] = __DIR__;
+
+require_once __DIR__ . '/core/libraries/Config/Helper.php';
+require_once __DIR__ . '/core/libraries/Storage/Helper.php';
+
+$kernel = require __DIR__ . '/core/kernel.php';
+$helpers = $kernel['helpers'];
+
+foreach ($helpers as $helper) {
+    if (($helper['cli'] ?? true) === false) {
+        continue;
+    }
+
+    $enabled = $helper['enabled']['console'] ?? ($helper['cli'] ?? true);
+    if (! $enabled) {
+        continue;
+    }
+
+    require_once $helper['path'];
+}
+
+require_once __DIR__ . '/core/bootstrap/autoload.php';
+
+if (function_exists('loadEnvFiles')) {
+    loadEnvFiles();
+}
+
+use Zero\Lib\Console\Application;
+
+$application = new Application();
+exit($application->run($argv));

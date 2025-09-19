@@ -70,6 +70,8 @@ Schema::create('users', function (Blueprint $table) {
     $table->timestamps();
 });
 ```
+You can chain fluent modifiers on column definitions (e.g., `$table->string('email')->nullable()->unique();`).
+
 
 Pass a number to `migrate:rollback` to reverse multiple batches, e.g. `php zero migrate:rollback 2`.
 
@@ -77,7 +79,7 @@ Modify tables with `Schema::table`:
 
 ```php
 Schema::table('users', function (Blueprint $table) {
-    $table->string('nickname', 50, true);
+    $table->string('nickname', 50)->nullable();
     $table->dropColumn('legacy_field');
 });
 ```

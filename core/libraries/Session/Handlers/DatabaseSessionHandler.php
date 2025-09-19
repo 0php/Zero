@@ -39,7 +39,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
 
             return true;
         } catch (\Throwable $e) {
-            error_log('Session timestamp update failed: ' . $e->getMessage());
+            Log::error('Session timestamp update failed', ['error' => $e->getMessage()]);
 
             return true;
         }
@@ -68,7 +68,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
 
             return is_array($row) ? (string) ($row['payload'] ?? '') : '';
         } catch (\Throwable $e) {
-            error_log('Session read failed: ' . $e->getMessage());
+            Log::error('Session read failed', ['error' => $e->getMessage()]);
             return '';
         }
     }
@@ -98,7 +98,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
 
             return true;
         } catch (\Throwable $e) {
-            error_log('Session write failed: ' . $e->getMessage());
+            Log::error('Session write failed', ['error' => $e->getMessage()]);
 
             return true;
         }
@@ -114,7 +114,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
                 'delete'
             );
         } catch (\Throwable $e) {
-            error_log('Session destroy failed: ' . $e->getMessage());
+            Log::error('Session destroy failed', ['error' => $e->getMessage()]);
         }
 
         return true;
@@ -132,7 +132,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
                 'delete'
             );
         } catch (\Throwable $e) {
-            error_log('Session GC failed: ' . $e->getMessage());
+            Log::error('Session GC failed', ['error' => $e->getMessage()]);
         }
 
         return 0;
@@ -161,7 +161,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
             Database::query($sql);
             self::$tableEnsured = true;
         } catch (\Throwable $e) {
-            error_log('Session table ensure failed: ' . $e->getMessage());
+            Log::error('Session table ensure failed', ['error' => $e->getMessage()]);
         }
     }
 }

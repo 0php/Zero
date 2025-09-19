@@ -12,7 +12,7 @@ return new class extends Migration
             $table->string('id', 128);
             $table->primary('id');
             $table->bigInteger('user_id', false, true);
-            $table->string('ip_address', 45, true);
+            $table->string('ip_address', 45)->nullable();
             $table->text('user_agent');
             $table->text('payload', false);
             $table->timestamp('last_activity', false, 'CURRENT_TIMESTAMP');

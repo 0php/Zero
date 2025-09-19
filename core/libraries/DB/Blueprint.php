@@ -11,76 +11,179 @@ use InvalidArgumentException;
  */
 class Blueprint
 {
-    /** @var string[] */
+    /** @var array<int, string|ColumnDefinition> */
     protected array $columns = [];
 
-    /** @var string[] */
+    /** @var array<int, string|ColumnDefinition> */
     protected array $operations = [];
 
     /** @var string[] */
     protected array $indexes = [];
 
-    public function __construct(protected string $table, protected string $action = 'table')
-    {
+    public function __construct(
+        protected string $table,
+        protected string $action = 'table'
+    ) {
         if (!in_array($this->action, ['create', 'table'], true)) {
             throw new InvalidArgumentException('Invalid blueprint action.');
         }
     }
 
     /** Add an auto-incrementing primary key column. */
-    public function id(string $column = 'id'): self
+    public function id(string $column = 'id'): ColumnDefinition
     {
-        return $this->column("`{$column}` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY");
+        return $this->addColumnDefinition($column, 'BIGINT UNSIGNED AUTO_INCREMENT')
+            ->nullable(false)
+            ->primary();
     }
 
-    public function increments(string $column): self
+    public function increments(string $column): ColumnDefinition
     {
         return $this->id($column);
     }
 
     /** Add an integer column. */
-    public function integer(string $column, bool $unsigned = false, bool $nullable = false, mixed $default = null): self
+    public function integer(string $column, bool $unsigned = false, bool $nullable = false, mixed $default = null): ColumnDefinition
     {
-        return $this->column($this->compileColumn($column, $unsigned ? 'INT UNSIGNED' : 'INT', $nullable, $default));
+        $definition = $this->addColumnDefinition($column, 'INT');
+
+        if ($unsigned) {
+            $definition->unsigned();
+        }
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        if (func_num_args() >= 4) {
+            $definition->default($default);
+        }
+
+        return $definition;
     }
 
     /** Add a big integer column. */
-    public function bigInteger(string $column, bool $unsigned = false, bool $nullable = false, mixed $default = null): self
+    public function bigInteger(string $column, bool $unsigned = false, bool $nullable = false, mixed $default = null): ColumnDefinition
     {
-        return $this->column($this->compileColumn($column, $unsigned ? 'BIGINT UNSIGNED' : 'BIGINT', $nullable, $default));
+        $definition = $this->addColumnDefinition($column, 'BIGINT');
+
+        if ($unsigned) {
+            $definition->unsigned();
+        }
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        if (func_num_args() >= 4) {
+            $definition->default($default);
+        }
+
+        return $definition;
     }
 
     /** Add a string/varchar column. */
-    public function string(string $column, int $length = 255, bool $nullable = false, mixed $default = null): self
+    public function string(string $column, int $length = 255, bool $nullable = false, mixed $default = null): ColumnDefinition
     {
-        return $this->column($this->compileColumn($column, sprintf('VARCHAR(%d)', $length), $nullable, $default));
+        $definition = $this->addColumnDefinition($column, sprintf('VARCHAR(%d)', $length));
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        if (func_num_args() >= 4) {
+            $definition->default($default);
+        }
+
+        return $definition;
     }
 
     /** Add a text column. */
-    public function text(string $column, bool $nullable = true): self
+    public function text(string $column, bool $nullable = true): ColumnDefinition
     {
-        $definition = sprintf('`%s` TEXT', $column);
-        $definition .= $nullable ? ' NULL' : ' NOT NULL';
+        $definition = $this->addColumnDefinition($column, 'TEXT');
 
-        return $this->column($definition);
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        return $definition;
     }
 
     /** Add a boolean column. */
-    public function boolean(string $column, bool $nullable = false, bool $default = false): self
+    public function boolean(string $column, bool $nullable = false, bool $default = false): ColumnDefinition
     {
-        return $this->column($this->compileColumn($column, 'TINYINT(1)', $nullable, $default ? 1 : 0));
+        $definition = $this->addColumnDefinition($column, 'TINYINT(1)');
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        $definition->default($default);
+
+        return $definition;
     }
 
     /** Add a timestamp column optionally allowing null/default values. */
-    public function timestamp(string $column, bool $nullable = false, mixed $default = null): self
+    public function timestamp(string $column, bool $nullable = false, mixed $default = null): ColumnDefinition
     {
-        return $this->column($this->compileColumn($column, 'TIMESTAMP', $nullable, $default));
+        $definition = $this->addColumnDefinition($column, 'TIMESTAMP');
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        if (func_num_args() >= 3) {
+            $definition->default($default);
+        }
+
+        return $definition;
     }
 
     /** Add a DATETIME column definition. */
-    public function datetime(string $column, bool $nullable = false, mixed $default = null): self
+    public function datetime(string $column, bool $nullable = false, mixed $default = null): ColumnDefinition
     {
-        return $this->column($this->compileColumn($column, 'DATETIME', $nullable, $default));
+        $definition = $this->addColumnDefinition($column, 'DATETIME');
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        if (func_num_args() >= 3) {
+            $definition->default($default);
+        }
+
+        return $definition;
+    }
+
+    /** Add created_at / updated_at timestamp columns. */
+    public function timestamps(): self
+    {
+        $this->timestamp('created_at')->nullable();
+        $this->timestamp('updated_at')->nullable();
+
+        return $this;
+    }
+
+    /** Add a soft delete timestamp column. */
+    public function softDeletes(): self
+    {
+        $this->timestamp('deleted_at')->nullable();
+
+        return $this;
+    }
+
+    /** Add a foreign key id column. */
+    public function foreignId(string $column, bool $nullable = false): ColumnDefinition
+    {
+        $definition = $this->addColumnDefinition($column, 'BIGINT');
+        $definition->unsigned();
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        return $definition;
     }
 
     /** Add a generic index for the given columns. */
@@ -99,24 +202,6 @@ class Blueprint
     public function primary(string|array $columns, ?string $name = null): self
     {
         return $this->addIndex('primary', (array) $columns, $name);
-    }
-
-    /** Add created_at / updated_at timestamp columns. */
-    public function timestamps(): self
-    {
-        return $this->timestamp('created_at', true)->timestamp('updated_at', true);
-    }
-
-    /** Add a soft delete timestamp column. */
-    public function softDeletes(): self
-    {
-        return $this->timestamp('deleted_at', true);
-    }
-
-    /** Add a foreign key id column. */
-    public function foreignId(string $column, bool $nullable = false): self
-    {
-        return $this->column($this->compileColumn($column, 'BIGINT UNSIGNED', $nullable, null));
     }
 
     /** Drop a column from the table. */
@@ -138,24 +223,49 @@ class Blueprint
     /** Add a raw column/operation definition. */
     public function raw(string $definition): self
     {
-        return $this->column($definition);
+        if ($this->action === 'create') {
+            $this->columns[] = $definition;
+        } else {
+            $this->operations[] = $definition;
+        }
+
+        return $this;
     }
 
     /** Render SQL statements for the blueprint. */
     public function toSql(): array
     {
         if ($this->action === 'create') {
-            $definitions = array_merge($this->columns, $this->indexes);
-            $columns = implode(",\n    ", $definitions);
+            $definitions = [];
 
-            return [sprintf("CREATE TABLE `%s` (\n    %s\n)", $this->table, $columns)];
+            foreach ($this->columns as $column) {
+                $definitions[] = $column instanceof ColumnDefinition ? $column->toSql() : $column;
+            }
+
+            $definitions = array_merge($definitions, $this->indexes);
+            $columns = implode(",
+    ", $definitions);
+
+            return [sprintf("CREATE TABLE `%s` (
+    %s
+)", $this->table, $columns)];
         }
 
-        if (empty($this->operations)) {
+        $operations = [];
+
+        foreach ($this->operations as $operation) {
+            if ($operation instanceof ColumnDefinition) {
+                $operations[] = 'ADD COLUMN ' . $operation->toSql();
+            } else {
+                $operations[] = $operation;
+            }
+        }
+
+        if (empty($operations)) {
             return [];
         }
 
-        return [sprintf('ALTER TABLE `%s` %s', $this->table, implode(', ', $this->operations))];
+        return [sprintf('ALTER TABLE `%s` %s', $this->table, implode(', ', $operations))];
     }
 
     protected function addIndex(string $type, array $columns, ?string $name): self
@@ -200,38 +310,127 @@ class Blueprint
         return substr($name, 0, 64);
     }
 
-    protected function column(string $definition): self
+    protected function addColumnDefinition(string $column, string $type): ColumnDefinition
     {
+        $definition = new ColumnDefinition($this, $column, $type);
+
         if ($this->action === 'create') {
             $this->columns[] = $definition;
         } else {
-            $this->operations[] = 'ADD COLUMN ' . $definition;
+            $this->operations[] = $definition;
         }
+
+        return $definition;
+    }
+}
+
+class ColumnDefinition
+{
+    private bool $nullable = false;
+    private bool $unsigned = false;
+    private bool $defaultSet = false;
+    private mixed $defaultValue = null;
+
+    public function __construct(
+        private Blueprint $blueprint,
+        private string $column,
+        private string $type
+    ) {
+    }
+
+    public function nullable(bool $value = true): self
+    {
+        $this->nullable = $value;
 
         return $this;
     }
 
-    protected function compileColumn(string $column, string $type, bool $nullable, mixed $default): string
+    public function default(mixed $value): self
     {
-        $definition = sprintf('`%s` %s', $column, $type);
-        $definition .= $nullable ? ' NULL' : ' NOT NULL';
+        $this->defaultValue = $value;
+        $this->defaultSet = true;
 
-        if ($default !== null) {
-            if (is_string($default)) {
-                $upper = strtoupper($default);
-                $shouldQuote = !in_array($upper, ['CURRENT_TIMESTAMP', 'CURRENT_DATE', 'CURRENT_TIME'], true);
-                if ($shouldQuote) {
-                    $default = "'" . addslashes($default) . "'";
-                } else {
-                    $default = $upper;
-                }
-            } elseif (is_bool($default)) {
-                $default = $default ? '1' : '0';
-            }
+        return $this;
+    }
 
-            $definition .= ' DEFAULT ' . $default;
+    public function unsigned(bool $value = true): self
+    {
+        $this->unsigned = $value;
+
+        return $this;
+    }
+
+    public function primary(?string $name = null): self
+    {
+        $this->blueprint->primary($this->column, $name);
+
+        return $this;
+    }
+
+    public function unique(?string $name = null): self
+    {
+        $this->blueprint->unique($this->column, $name);
+
+        return $this;
+    }
+
+    public function index(?string $name = null): self
+    {
+        $this->blueprint->index($this->column, $name);
+
+        return $this;
+    }
+
+    public function useCurrent(): self
+    {
+        return $this->default('CURRENT_TIMESTAMP');
+    }
+
+    public function toSql(): string
+    {
+        $type = $this->compileType();
+        $definition = sprintf('`%s` %s', $this->column, $type);
+        $definition .= $this->nullable ? ' NULL' : ' NOT NULL';
+
+        if ($this->defaultSet) {
+            $definition .= ' DEFAULT ' . $this->formatDefault($this->defaultValue);
         }
 
         return $definition;
+    }
+
+    protected function compileType(): string
+    {
+        $type = $this->type;
+
+        if ($this->unsigned && !str_contains(strtoupper($type), 'UNSIGNED')) {
+            $type .= ' UNSIGNED';
+        }
+
+        return $type;
+    }
+
+    protected function formatDefault(mixed $value): string
+    {
+        if ($value === null) {
+            return 'NULL';
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        $value = (string) $value;
+        $upper = strtoupper($value);
+
+        if (in_array($upper, ['CURRENT_TIMESTAMP', 'CURRENT_DATE', 'CURRENT_TIME'], true)) {
+            return $upper;
+        }
+
+        return "'" . addslashes($value) . "'";
     }
 }

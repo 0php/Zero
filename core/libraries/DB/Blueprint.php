@@ -110,6 +110,23 @@ class Blueprint
         return $definition;
     }
 
+    /** Add an ENUM column. */
+    public function enum(string $column, array $allowed, bool $nullable = false, mixed $default = null): ColumnDefinition
+    {
+        $options = implode(', ', array_map(static fn ($value) => "'" . addslashes((string) $value) . "'", $allowed));
+        $definition = $this->addColumnDefinition($column, 'ENUM(' . $options . ')');
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        if ($default !== null) {
+            $definition->default($default);
+        }
+
+        return $definition;
+    }
+
     /** Add a boolean column. */
     public function boolean(string $column, bool $nullable = false, bool $default = false): ColumnDefinition
     {

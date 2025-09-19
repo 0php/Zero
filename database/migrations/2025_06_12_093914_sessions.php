@@ -9,15 +9,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('sessions', function (Blueprint $table) {
-            $table->string('id', 128);
-            $table->primary('id');
-            $table->bigInteger('user_id', false, true);
+            $table->string('id', 128)->primary();
+            $table->foreignId('user_id')->nullable()->index();
             $table->string('ip_address', 45)->nullable();
-            $table->text('user_agent');
+            $table->text('user_agent', false);
             $table->text('payload', false);
-            $table->timestamp('last_activity', false, 'CURRENT_TIMESTAMP');
-            $table->index('last_activity');
-            $table->index('user_id');
+            $table->timestamp('last_activity')->useCurrent()->index();
+            $table->timestamps();
         });
     }
 

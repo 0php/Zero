@@ -6,37 +6,37 @@ Zero Framework now ships with a Laravel-style authentication flow covering regis
 
 | Feature | Route | Controller |
 | --- | --- | --- |
-| Registration | `GET /register`, `POST /register` | `App\Controllers\RegisterController` |
-| Email verification notice | `GET /email/verify` | `App\Controllers\EmailVerificationController@notice` |
-| Email verification callback | `GET /email/verify/{token}` | `EmailVerificationController@verify` |
-| Resend verification email | `POST /email/verification-notification` | `EmailVerificationController@resend` |
-| Login / logout | `GET /login`, `POST /login`, `POST /logout` | `App\Controllers\AuthController` |
-| Password reset request | `GET /password/forgot`, `POST /password/forgot` | `App\Controllers\PasswordResetController` |
-| Password reset form | `GET /password/reset/{token}`, `POST /password/reset` | `PasswordResetController` |
+| Registration | `GET /register`, `POST /register` | `App\Controllers\Auth\RegisterController` |
+| Email verification notice | `GET /email/verify` | `App\Controllers\Auth\EmailVerificationController@notice` |
+| Email verification callback | `GET /email/verify/{token}` | `App\Controllers\Auth\EmailVerificationController@verify` |
+| Resend verification email | `POST /email/verification-notification` | `App\Controllers\Auth\EmailVerificationController@resend` |
+| Login / logout | `GET /login`, `POST /login`, `POST /logout` | `App\Controllers\Auth\AuthController` |
+| Password reset request | `GET /password/forgot`, `POST /password/forgot` | `App\Controllers\Auth\PasswordResetController` |
+| Password reset form | `GET /password/reset/{token}`, `POST /password/reset` | `App\Controllers\Auth\PasswordResetController` |
 
 All generated mail is dispatched through the `Mail` facade (`Zero\Lib\Mail\Mailer`) and rendered with Blade-style views in `resources/views/mail`.
 
 ## Registration & Verification
 
 1. Visitors submit the registration form (`resources/views/auth/register.php`).
-2. `RegisterController::store()` validates the payload, hashes the password with `Zero\Lib\Crypto::hash()`, creates the user, and delegates token creation/email delivery to `App\Services\Auth\EmailVerificationService`.
+2. `App\Controllers\Auth\RegisterController::store()` validates the payload, hashes the password with `Zero\Lib\Crypto::hash()`, creates the user, and delegates token creation/email delivery to `App\Services\Auth\EmailVerificationService`.
 3. Verification tokens are stored in `email_verification_tokens` with a one-hour expiry. Links look like `/email/verify/{token}?email=jane@example.com`.
-4. `EmailVerificationController::verify()` ensures the token matches the email, checks expiry, marks `email_verified_at`, deletes outstanding tokens, and redirects to the login page with a success banner.
+4. `App\Controllers\Auth\EmailVerificationController::verify()` ensures the token matches the email, checks expiry, marks `email_verified_at`, deletes outstanding tokens, and redirects to the login page with a success banner.
 5. Users can request a new link from the verification notice screen. The controller sends another email without leaking whether an account exists.
 
 ## Login Flow
 
-`AuthController` preserves the original login/logout behaviour but now refuses access until `email_verified_at` is populated. When an unverified user attempts to sign in, the controller re-issues a verification email and flashes a helpful message.
+`App\Controllers\Auth\AuthController` preserves the original login/logout behaviour but now refuses access until `email_verified_at` is populated. When an unverified user attempts to sign in, the controller re-issues a verification email and flashes a helpful message.
 
 Successful logins issue a signed JWT (via `Zero\Lib\Auth\Auth::login()`), stored in an HTTP-only cookie. The `Auth` facade exposes helpers such as `Auth::user()` and `Auth::id()` for downstream controllers, views, or middleware.
 
 ## Password Resets
 
 1. Users initiate the flow from `/password/forgot`.
-2. `PasswordResetController::email()` records a hashed token in `password_reset_tokens` and sends a link using `App\Services\Auth\PasswordResetService`.
+2. `App\Controllers\Auth\PasswordResetController::email()` records a hashed token in `password_reset_tokens` and sends a link using `App\Services\Auth\PasswordResetService`.
 3. Tokens expire after 60 minutes and are unique per email. The reset link includes both the token and email, e.g. `/password/reset/{token}?email=jane@example.com`.
-4. `PasswordResetController::show()` validates the token before rendering the reset form (`resources/views/auth/reset-password.php`).
-5. On submission `PasswordResetController::update()` re-validates the token, hashes the new password, clears outstanding reset tokens, and redirects users back to the login page with a confirmation banner.
+4. `App\Controllers\Auth\PasswordResetController::show()` validates the token before rendering the reset form (`resources/views/auth/reset-password.php`).
+5. On submission `App\Controllers\Auth\PasswordResetController::update()` re-validates the token, hashes the new password, clears outstanding reset tokens, and redirects users back to the login page with a confirmation banner.
 
 ## Session Driver
 

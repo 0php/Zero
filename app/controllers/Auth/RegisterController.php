@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Controllers;
+namespace App\Controllers\Auth;
 
 use App\Models\User;
 use App\Services\Auth\EmailVerificationService;

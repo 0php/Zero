@@ -123,7 +123,7 @@ if (!function_exists('zero_request_expects_json')) {
 }
 
 if (!function_exists('zero_build_error_response')) {
-    function zero_build_error_response(int $status, array $context = []): \Zero\Lib\Response
+    function zero_build_error_response(int $status, array $context = []): HttpResponse
     {
         $expectsJson = zero_request_expects_json();
         $message = $context['message'] ?? match ($status) {

@@ -80,7 +80,7 @@ zero                # CLI entry point for serving and scaffolding
 - Middleware can short-circuit by returning a response, ideal for guard logic.
 
 ### Request & Response Lifecycle
-- `Zero\Lib\Request::capture()` snapshots query, form, JSON, file, and header data, exposing helpers like `input`, `json`, `header`, `ip`, and `expectsJson`.
+- `Zero\Lib\Http\Request::capture()` snapshots query, form, JSON, file, and header data, exposing helpers like `input`, `json`, `header`, `ip`, and `expectsJson`.
 - Controllers may return strings, arrays, models, iterables, or explicit `Response` objects; the router normalises everything through `Zero\Lib\Response::resolve()`.
 - Response factories cover HTML, JSON, text, redirects, streams, and opinionated API envelopes.
 
@@ -100,8 +100,8 @@ zero                # CLI entry point for serving and scaffolding
 - Call `toBase()` when you need the underlying DBML builder for complex queries.
 
 ### Authentication
-- `App\Controllers\AuthController` handles login/logout and refuses access until the account is email verified.
-- `RegisterController`, `EmailVerificationController`, and `PasswordResetController` provide Laravel-style registration, verification, and password reset flows out of the box.
+- `App\Controllers\Auth\AuthController` handles login/logout and refuses access until the account is email verified.
+- `App\Controllers\Auth\RegisterController`, `App\Controllers\Auth\EmailVerificationController`, and `App\Controllers\Auth\PasswordResetController` provide Laravel-style registration, verification, and password reset flows out of the box.
 - Outbound mail (verification/reset links) is rendered with Blade-style views and delivered through the built-in SMTP mailer.
 - Protect routes with `App\Middlewares\Auth`; unauthenticated requests are redirected to `/login` with the intended URL stored in the session.
 - Access the current user via the `Auth` facade (`Auth::user()`, `Auth::id()`), or extend the controllers to suit domain-specific policies.

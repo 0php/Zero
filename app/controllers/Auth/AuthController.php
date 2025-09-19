@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Controllers;
+namespace App\Controllers\Auth;
 
 use App\Models\User;
 use App\Services\Auth\EmailVerificationService;
@@ -17,11 +17,10 @@ class AuthController
      */
     public function showLogin(): Response
     {
-        
+
         if (Auth::user()) {
             return Response::redirect('/');
         }
-
 
         $status = Session::get('status');
         $error = Session::get('auth_error');

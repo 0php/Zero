@@ -3,6 +3,8 @@
 namespace Zero\Lib;
 
 use Exception;
+use Zero\Lib\Http\Request;
+use Zero\Lib\Http\Response;
 use Zero\Lib\Log;
 use ReflectionMethod;
 use ReflectionNamedType;

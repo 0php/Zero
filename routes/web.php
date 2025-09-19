@@ -1,11 +1,11 @@
 <?php
 
-use App\Controllers\AuthController;
+use App\Controllers\Auth\AuthController;
 use App\Controllers\DashboardController;
-use App\Controllers\EmailVerificationController;
+use App\Controllers\Auth\EmailVerificationController;
 use App\Controllers\HomeController;
-use App\Controllers\PasswordResetController;
-use App\Controllers\RegisterController;
+use App\Controllers\Auth\PasswordResetController;
+use App\Controllers\Auth\RegisterController;
 use App\Middlewares\Auth as AuthMiddleware;
 use App\Middlewares\Guest as GuestMiddleware;
 use Zero\Lib\Router;

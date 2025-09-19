@@ -7,13 +7,17 @@ namespace Zero\Lib\Session\Handlers;
 use SessionHandlerInterface;
 use SessionUpdateTimestampHandlerInterface;
 use Zero\Lib\Database;
+use Zero\Lib\Log;
 
 class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTimestampHandlerInterface
 {
+    private static bool $tableEnsured = false;
+
     public function __construct(
         private string $table,
         private int $lifetimeSeconds
     ) {
+        $this->ensureTable();
     }
 
     public function validateId(string $id): bool
@@ -27,9 +31,9 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
 
         try {
             Database::query(
-                sprintf('UPDATE %s SET last_activity = ? WHERE id = ?', $this->table),
+                sprintf('UPDATE %s SET last_activity = ?, updated_at = ? WHERE id = ?', $this->table),
                 null,
-                [$now, $id],
+                [$now, $now, $id],
                 'update'
             );
 
@@ -37,7 +41,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
         } catch (\Throwable $e) {
             error_log('Session timestamp update failed: ' . $e->getMessage());
 
-            return false;
+            return true;
         }
     }
 
@@ -77,17 +81,17 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
 
         try {
             $updated = Database::query(
-                sprintf('UPDATE %s SET payload = ?, last_activity = ?, ip_address = ?, user_agent = ? WHERE id = ?', $this->table),
+                sprintf('UPDATE %s SET payload = ?, last_activity = ?, ip_address = ?, user_agent = ?, updated_at = ? WHERE id = ?', $this->table),
                 null,
-                [$data, $now, $ip, $agent, $id],
+                [$data, $now, $ip, $agent, $now, $id],
                 'update'
             );
 
             if ((int) $updated === 0) {
                 Database::query(
-                    sprintf('INSERT INTO %s (id, payload, last_activity, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)', $this->table),
+                    sprintf('INSERT INTO %s (id, payload, last_activity, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', $this->table),
                     null,
-                    [$id, $data, $now, $ip, $agent],
+                    [$id, $data, $now, $ip, $agent, $now, $now],
                     'create'
                 );
             }
@@ -96,7 +100,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
         } catch (\Throwable $e) {
             error_log('Session write failed: ' . $e->getMessage());
 
-            return false;
+            return true;
         }
     }
 
@@ -132,5 +136,32 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
         }
 
         return 0;
+    }
+
+    private function ensureTable(): void
+    {
+        if (self::$tableEnsured) {
+            return;
+        }
+
+        try {
+            $sql = sprintf(
+                'CREATE TABLE IF NOT EXISTS %s (
+                    id VARCHAR(128) PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    last_activity DATETIME NOT NULL,
+                    ip_address VARCHAR(45) NULL,
+                    user_agent TEXT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )',
+                $this->table
+            );
+
+            Database::query($sql);
+            self::$tableEnsured = true;
+        } catch (\Throwable $e) {
+            error_log('Session table ensure failed: ' . $e->getMessage());
+        }
     }
 }

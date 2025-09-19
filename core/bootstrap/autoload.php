@@ -81,10 +81,9 @@ spl_autoload_register(function ($className) use ($aliases) {
 
     // Handle classes in the App\Controllers namespace
     if(strpos($className, 'App\Controllers') !== false) {
-        // Remove the namespace prefix
         $className = str_replace('App\Controllers\\', '', $className);
-        // Get the full path of the controller file
-        $class_path = app_path("controllers/$className.php");
+        $relative = str_replace('\\', '/', $className);
+        $class_path = app_path('controllers/' . $relative . '.php');
         // If the controller file exists, require it
         if (file_exists($class_path)) {
             require_once $class_path;
@@ -95,7 +94,8 @@ spl_autoload_register(function ($className) use ($aliases) {
     // Handle classes in the App\Models namespace
     if(strpos($className, 'App\Models') !== false) {
         $className = str_replace('App\Models\\', '', $className);
-        $class_path = app_path("models/$className.php");
+        $relative = str_replace('\\', '/', $className);
+        $class_path = app_path('models/' . $relative . '.php');
 
         if (file_exists($class_path)) {
             require_once $class_path;

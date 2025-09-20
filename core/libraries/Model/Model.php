@@ -8,15 +8,18 @@ use JsonSerializable;
 use ReflectionMethod;
 use RuntimeException;
 use Zero\Lib\DB\DBML;
+use Zero\Lib\DB\DBMLExpression;
 use Zero\Lib\Support\Paginator;
 
 /**
  * Minimalist active-record style model built on top of the DBML query builder.
  *
  * The base model provides conveniences inspired by Laravel's Eloquent such as
- * mass-assignment, timestamp management, and fluent query access, while
- * remaining dependency-free. Extend this class within `App\Models` to create
- * strongly-typed representations of database tables.
+ * mass-assignment, timestamp management, soft-delete opt-in, and fluent query
+ * access, while remaining dependency-free. Extend this class within
+ * `App\Models` to create strongly-typed representations of database tables.
+ * Enable soft deletes by setting `protected bool $softDeletes = true;` on the
+ * child model and ensuring the table includes a nullable `deleted_at` column.
  */
 class Model implements JsonSerializable
 {
@@ -56,6 +59,16 @@ class Model implements JsonSerializable
      * Whether created_at/updated_at columns should be maintained automatically.
      */
     protected bool $timestamps = true;
+
+    /**
+     * Toggle soft delete behaviour; set to true on child models to opt-in.
+     */
+    protected bool $softDeletes = false;
+
+    /**
+     * Column name that stores the soft delete timestamp.
+     */
+    protected string $deletedAtColumn = 'deleted_at';
 
     /**
      * Column names used for timestamps when enabled.
@@ -191,25 +204,77 @@ class Model implements JsonSerializable
             return false;
         }
 
-        $key = $this->getKey();
-
-        if ($key === null) {
-            throw new RuntimeException('Cannot delete a model without a primary key value.');
+        if ($this->usesSoftDeletes()) {
+            return $this->performSoftDelete();
         }
 
-        $this->fireHook('beforeDelete');
+        return $this->performHardDelete();
+    }
 
-        $deleted = $this->newBaseQuery()
-            ->where($this->getPrimaryKey(), $key)
-            ->delete();
-
-        if ($deleted) {
-            $this->exists = false;
-            $this->fireHook('afterDelete');
-            $this->syncOriginal();
+    /**
+     * Force a hard delete even when soft deletes are enabled.
+     */
+    public function forceDelete(): bool
+    {
+        if (! $this->exists) {
+            return false;
         }
 
-        return (bool) $deleted;
+        return $this->performHardDelete();
+    }
+
+    /**
+     * Restore a soft deleted model instance.
+     */
+    public function restore(): bool
+    {
+        if (! $this->usesSoftDeletes()) {
+            return false;
+        }
+
+        if (! $this->trashed()) {
+            return true;
+        }
+
+        $this->fireHook('beforeRestore');
+
+        $this->attributes[$this->getDeletedAtColumn()] = null;
+
+        $restored = $this->performUpdate();
+
+        if ($restored) {
+            $this->fireHook('afterRestore');
+        }
+
+        return $restored;
+    }
+
+    /**
+     * Determine whether the model instance has been soft deleted.
+     */
+    public function trashed(): bool
+    {
+        if (! $this->usesSoftDeletes()) {
+            return false;
+        }
+
+        return $this->getAttribute($this->getDeletedAtColumn()) !== null;
+    }
+
+    /**
+     * Expose whether the model uses soft deletes.
+     */
+    public function usesSoftDeletes(): bool
+    {
+        return $this->softDeletes;
+    }
+
+    /**
+     * Resolve the column name that stores the soft delete timestamp.
+     */
+    public function getDeletedAtColumn(): string
+    {
+        return $this->deletedAtColumn;
     }
 
     /**
@@ -227,8 +292,13 @@ class Model implements JsonSerializable
             throw new RuntimeException('Cannot refresh a model without a primary key value.');
         }
 
-        $fresh = static::query()
-            ->where($this->getPrimaryKey(), $key)
+        $query = static::query();
+
+        if ($this->usesSoftDeletes()) {
+            $query = $query->withTrashed();
+        }
+
+        $fresh = $query->where($this->getPrimaryKey(), $key)
             ->first();
 
         if ($fresh instanceof static) {
@@ -616,6 +686,72 @@ class Model implements JsonSerializable
     }
 
     /**
+     * Perform the soft delete update.
+     */
+    protected function performSoftDelete(): bool
+    {
+        $key = $this->getKey();
+
+        if ($key === null) {
+            throw new RuntimeException('Cannot delete a model without a primary key value.');
+        }
+
+        $timestamp = $this->freshTimestampString();
+        $columns = [
+            $this->getDeletedAtColumn() => $timestamp,
+        ];
+
+        if ($this->usesTimestamps()) {
+            $columns[$this->updatedAtColumn] = $timestamp;
+        }
+
+        $this->fireHook('beforeDelete');
+
+        $deleted = $this->newBaseQuery()
+            ->where($this->getPrimaryKey(), $key)
+            ->update($columns);
+
+        if ($deleted) {
+            $this->forceFill($columns);
+            $this->fireHook('afterDelete');
+            $this->syncOriginal();
+        }
+
+        return (bool) $deleted;
+    }
+
+    /**
+     * Perform a hard delete against the underlying table.
+     */
+    protected function performHardDelete(): bool
+    {
+        $key = $this->getKey();
+
+        if ($key === null) {
+            throw new RuntimeException('Cannot delete a model without a primary key value.');
+        }
+
+        $this->fireHook('beforeDelete');
+
+        $deleted = $this->newBaseQuery()
+            ->where($this->getPrimaryKey(), $key)
+            ->delete();
+
+        if ($deleted) {
+            $this->exists = false;
+
+            if ($this->usesSoftDeletes()) {
+                $this->attributes[$this->getDeletedAtColumn()] = null;
+            }
+
+            $this->fireHook('afterDelete');
+            $this->syncOriginal();
+        }
+
+        return (bool) $deleted;
+    }
+
+    /**
      * Apply timestamp columns when inserting rows.
      */
     protected function applyTimestampsForInsert(array &$attributes): void
@@ -883,6 +1019,8 @@ class Model implements JsonSerializable
     protected function afterSave(): void {}
     protected function beforeDelete(): void {}
     protected function afterDelete(): void {}
+    protected function beforeRestore(): void {}
+    protected function afterRestore(): void {}
 
     protected function newUuid(): string
     {
@@ -959,10 +1097,19 @@ class Model implements JsonSerializable
  */
 class ModelQuery
 {
+    protected bool $usesSoftDeletes = false;
+    protected string $deletedAtColumn = 'deleted_at';
+    protected bool $includeTrashed = false;
+    protected bool $onlyTrashed = false;
+
     public function __construct(
         protected string $modelClass,
         protected DBML $builder
     ) {
+        /** @var Model $model */
+        $model = new $this->modelClass();
+        $this->usesSoftDeletes = $model->usesSoftDeletes();
+        $this->deletedAtColumn = $model->getDeletedAtColumn();
     }
 
     public function __clone(): void
@@ -986,6 +1133,42 @@ class ModelQuery
         return $result;
     }
 
+    public function withTrashed(): self
+    {
+        if (! $this->usesSoftDeletes) {
+            return $this;
+        }
+
+        $this->includeTrashed = true;
+        $this->onlyTrashed = false;
+
+        return $this;
+    }
+
+    public function onlyTrashed(): self
+    {
+        if (! $this->usesSoftDeletes) {
+            return $this;
+        }
+
+        $this->includeTrashed = true;
+        $this->onlyTrashed = true;
+
+        return $this;
+    }
+
+    public function withoutTrashed(): self
+    {
+        if (! $this->usesSoftDeletes) {
+            return $this;
+        }
+
+        $this->includeTrashed = false;
+        $this->onlyTrashed = false;
+
+        return $this;
+    }
+
     /**
      * Execute the query and hydrate an array of models.
      *
@@ -993,7 +1176,7 @@ class ModelQuery
      */
     public function get(array|string|DBMLExpression $columns = []): array
     {
-        $records = $this->builder->get($columns);
+        $records = $this->preparedBuilder()->get($columns);
 
         return array_map(fn (array $attributes) => $this->newModel($attributes, true), $records);
     }
@@ -1003,7 +1186,7 @@ class ModelQuery
      */
     public function first(array|string|DBMLExpression $columns = []): ?Model
     {
-        $record = $this->builder->first($columns);
+        $record = $this->preparedBuilder()->first($columns);
 
         if ($record === null) {
             return null;
@@ -1024,11 +1207,11 @@ class ModelQuery
     }
 
     /**
-     * Return the underlying DBML builder instance.
+     * Return the underlying DBML builder instance with applied scopes.
      */
     public function toBase(): DBML
     {
-        return $this->builder;
+        return $this->preparedBuilder();
     }
 
     /**
@@ -1036,7 +1219,7 @@ class ModelQuery
      */
     public function toSql(): string
     {
-        return $this->builder->toSql();
+        return $this->preparedBuilder()->toSql();
     }
 
     /**
@@ -1044,7 +1227,7 @@ class ModelQuery
      */
     public function getBindings(): array
     {
-        return $this->builder->getBindings();
+        return $this->preparedBuilder()->getBindings();
     }
 
     /**
@@ -1052,7 +1235,7 @@ class ModelQuery
      */
     public function count(string $column = '*'): int
     {
-        return $this->builder->count($column);
+        return $this->preparedBuilder()->count($column);
     }
 
     /**
@@ -1060,7 +1243,7 @@ class ModelQuery
      */
     public function paginate(int $perPage = 15, int $page = 1): Paginator
     {
-        $paginator = $this->builder->paginate($perPage, $page);
+        $paginator = $this->preparedBuilder()->paginate($perPage, $page);
 
         $items = array_map(fn (array $attributes) => $this->newModel($attributes, true), $paginator->items());
 
@@ -1072,7 +1255,7 @@ class ModelQuery
      */
     public function simplePaginate(int $perPage = 15, int $page = 1): Paginator
     {
-        $paginator = $this->builder->simplePaginate($perPage, $page);
+        $paginator = $this->preparedBuilder()->simplePaginate($perPage, $page);
 
         $items = array_map(fn (array $attributes) => $this->newModel($attributes, true), $paginator->items());
 
@@ -1084,7 +1267,7 @@ class ModelQuery
      */
     public function exists(): bool
     {
-        return $this->builder->exists();
+        return $this->preparedBuilder()->exists();
     }
 
     /**
@@ -1092,7 +1275,7 @@ class ModelQuery
      */
     public function pluck(string $column, ?string $key = null): array
     {
-        return $this->builder->pluck($column, $key);
+        return $this->preparedBuilder()->pluck($column, $key);
     }
 
     /**
@@ -1100,7 +1283,50 @@ class ModelQuery
      */
     public function value(string $column): mixed
     {
-        return $this->builder->value($column);
+        return $this->preparedBuilder()->value($column);
+    }
+
+    /**
+     * Delete the records matching the current query constraints.
+     */
+    public function delete(): int
+    {
+        if (! $this->usesSoftDeletes) {
+            return $this->preparedBuilder()->delete();
+        }
+
+        $deleted = 0;
+
+        foreach ($this->get() as $model) {
+            if ($model->delete()) {
+                $deleted++;
+            }
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * Force delete records ignoring soft delete semantics.
+     */
+    public function forceDelete(): int
+    {
+        if (! $this->usesSoftDeletes) {
+            return $this->preparedBuilder()->delete();
+        }
+
+        $deleted = 0;
+
+        $clone = clone $this;
+        $clone->withTrashed();
+
+        foreach ($clone->get() as $model) {
+            if ($model->forceDelete()) {
+                $deleted++;
+            }
+        }
+
+        return $deleted;
     }
 
     /**
@@ -1119,6 +1345,28 @@ class ModelQuery
         $model = new $this->modelClass();
 
         return $model->getPrimaryKey();
+    }
+
+    /**
+     * Clone the underlying builder and apply soft delete constraints.
+     */
+    protected function preparedBuilder(): DBML
+    {
+        $builder = clone $this->builder;
+
+        if (! $this->usesSoftDeletes) {
+            return $builder;
+        }
+
+        if ($this->onlyTrashed) {
+            return $builder->whereNotNull($this->deletedAtColumn);
+        }
+
+        if ($this->includeTrashed) {
+            return $builder;
+        }
+
+        return $builder->whereNull($this->deletedAtColumn);
     }
 }
 

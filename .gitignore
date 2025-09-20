@@ -10,3 +10,4 @@ node_modules
 .cache
 sqlite
 .log
+/storage/framework/logs

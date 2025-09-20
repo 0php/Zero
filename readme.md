@@ -149,6 +149,8 @@ zero                # CLI entry point for serving and scaffolding
 | `php zero make:migration Name [--force]`                                     | Create a timestamped migration in `database/migrations`.                          |
 | `php zero migrate`                                                           | Apply outstanding migrations.                                                     |
 | `php zero migrate:rollback [steps]`                                          | Roll back the latest migration batches.                                           |
+| `php zero migrate:refresh`                                                   | Roll back every migration batch, then rerun them.                                 |
+| `php zero migrate:fresh`                                                     | Drop all tables and execute migrations from scratch.                              |
 | `php zero make:seeder Name [--force]`                                        | Generate a seeder class in `database/seeders`.                                    |
 | `php zero db:seed [FQN]`                                                     | Run a seeder (defaults to `Database\\Seeders\\DatabaseSeeder`).                   |
 

@@ -30,6 +30,14 @@ php zero make:controller PostsController
 
 Creates `app/controllers/PostsController.php` with a simple `index` action. Append `--force` to overwrite an existing file. The generator will add the `Controller` suffix automatically if it is not present.
 
+### Generate a Service
+
+```bash
+php zero make:service Billing/Invoice
+```
+
+Creates `app/services/Billing/Invoice.php`, keeping the provided name intact and creating nested directories on demand. Use `--force` to overwrite an existing class. Both forward slashes and backslashes are accepted in the name.
+
 ### Generate a Model
 
 ```bash
@@ -127,7 +135,7 @@ After updating, review release notes, clear caches, and run migrations as needed
 
 ### Customising Stubs
 
-Stub templates live under `core/templates`. Adjust `controller.tmpl` or `model.tmpl` (or add new files) to change the generated skeletons.
+Stub templates live under `core/templates`. Adjust `controller.tmpl`, `service.tmpl`, or `model.tmpl` (or add new files) to change the generated skeletons.
 
 ## Extending the CLI
 

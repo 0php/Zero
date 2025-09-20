@@ -103,6 +103,14 @@ class Migrator
         return $rolled;
     }
 
+    /**
+     * Rollback all recorded migrations.
+     */
+    public function reset(): array
+    {
+        return $this->rollback(PHP_INT_MAX);
+    }
+
     protected function resolve(string $file): Migration
     {
         $migration = require $file;

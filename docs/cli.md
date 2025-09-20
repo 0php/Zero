@@ -70,8 +70,8 @@ Schema::create('users', function (Blueprint $table) {
     $table->timestamps();
 });
 ```
-You can chain fluent modifiers on column definitions (e.g., `$table->string('email')->nullable()->unique();`).
 
+You can chain fluent modifiers on column definitions (e.g., `$table->string('email')->nullable()->unique();`).
 
 Pass a number to `migrate:rollback` to reverse multiple batches, e.g. `php zero migrate:rollback 2`.
 
@@ -105,10 +105,6 @@ php zero make:middleware EnsureAdmin
 Creates `app/middlewares/EnsureAdminMiddleware.php` with a `handle()` stub ready for authentication or authorization logic. Use `--force` to overwrite an existing file.
 
 ### Update to Latest Release
-
-```bash
-php zero update:latest [--yes]
-```
 
 - Fetches a JSON manifest from the URL configured via `UPDATE_MANIFEST_URL`.
 - Displays the target version and files that will be updated before applying changes.

@@ -15,7 +15,6 @@ use Zero\Lib\Console\Commands\MigrateCommand;
 use Zero\Lib\Console\Commands\RollbackCommand;
 use Zero\Lib\Console\Commands\SeedCommand;
 use Zero\Lib\Console\Commands\ServeCommand;
-use Zero\Lib\Console\Commands\UpdateLatestCommand;
 
 final class Application
 {
@@ -39,7 +38,6 @@ final class Application
         $this->register(new MakeSeederCommand());
         $this->register(new MakeMiddlewareCommand());
         $this->register(new SeedCommand());
-        $this->register(new UpdateLatestCommand());
         $this->register(new KeyGenerateCommand());
     }
 

@@ -37,7 +37,7 @@ Router::group(['prefix' => '/email'], function () {
 });
 
 // Authenticated-only routes
-Router::group(['middleware' => [AuthMiddleware::class, [RoleMiddleware::class, 'admin']]], function () {
+Router::group(['middleware' => [AuthMiddleware::class]], function () {
     Router::post('/logout', [AuthController::class, 'logout']);
     Router::get('/dashboard', [DashboardController::class, 'index']);
 });

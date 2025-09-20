@@ -14,6 +14,45 @@ Zero Framework models each HTTP cycle with dedicated request and response abstra
   - `Request::ip()` – best-effort client IP detection.
 - The singleton instance is accessible via `Request::instance()` and injected automatically when a controller or middleware type-hints `Zero\Lib\Http\Request`.
 
+### Validating Input
+
+```php
+$data = Request::validate([
+    'name' => ['required', 'string', 'min:3'],
+    'email' => ['required', 'email', 'unique:users,email'],
+    'role_id' => ['exists:roles,id'],
+]);
+
+User::create($data);
+```
+
+- Rules accept pipe strings (`'required|min:3'`), arrays of rule strings, rule objects, or closures.
+- Validation failures raise `Zero\Lib\Validation\ValidationException`. HTTP requests receive a 422 response (JSON includes an `errors` bag; HTML fallback renders a formatted list). CLI contexts print the messages to `STDERR`.
+- Built-in rules cover the common cases; extend the system by implementing `Zero\Lib\Validation\RuleInterface` or passing a closure.
+
+| Rule | Description |
+| --- | --- |
+| `required` | Field must be present and non-empty (arrays must contain at least one element). |
+| `string` | Value must be a string when provided. |
+| `email` | Validates format using `FILTER_VALIDATE_EMAIL`. |
+| `boolean` | Accepts booleans, `0`/`1`, or string equivalents (`"true"`, `"false"`, `"on"`, `"off"`). |
+| `array` | Requires the value to be an array. |
+| `min:<value>` | Strings: minimum length; arrays: minimum item count; numerics: minimum numeric value. |
+| `max:<value>` | Strings: maximum length; arrays: maximum item count; numerics: maximum numeric value. |
+| `confirmed` | Requires a matching `<field>_confirmation` input. |
+| `exists:table,column` | Ensures the value (or each value in an array) exists in the specified table/column (column defaults to the attribute name). |
+| `unique:table,column,ignore,idColumn` | Fails when the value already exists; optional ignore/id parameters match Laravel's signature. Arrays are checked element by element. |
+| `password:letters,numbers,symbols` | Enforces password character classes; pass comma-separated requirements (omit parameters for a simple string check). |
+- Override error copy or attribute names by supplying the optional `$messages` / `$attributes` arrays:
+
+```php
+$credentials = Request::validate(
+    ['password' => ['required', 'string', 'min:8', 'password:letters,numbers', 'confirmed']],
+    ['password.min' => 'Passwords must contain at least :min characters.'],
+    ['password' => 'account password']
+);
+```
+
 ## Response Building (`Zero\Lib\Http\Response`)
 
 Controllers can return a wide range of values; the router normalises them with `Response::resolve()`:

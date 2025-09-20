@@ -8,6 +8,7 @@ use App\Services\Auth\EmailVerificationService;
 use Zero\Lib\Http\Request;
 use Zero\Lib\Http\Response;
 use Zero\Lib\Session;
+use Zero\Lib\Validation\ValidationException;
 
 class EmailVerificationController
 {
@@ -15,21 +16,27 @@ class EmailVerificationController
     {
         $status = Session::get('status');
         $errors = Session::get('verification_errors') ?? [];
+        $old = Session::get('verification_old') ?? [];
 
         Session::remove('status');
         Session::remove('verification_errors');
+        Session::remove('verification_old');
 
-        return view('auth/verify-email', compact('status', 'errors'));
+        return view('auth/verify-email', compact('status', 'errors', 'old'));
     }
 
     public function verify(Request $request, string $token): Response
     {
-        $email = strtolower(trim((string) $request->input('email', '')));
-
-        if ($email === '') {
+        try {
+            $payload = $request->validate([
+                'email' => ['required', 'email'],
+            ]);
+        } catch (ValidationException $exception) {
             Session::set('status', 'Verification link is missing the email address. Please request a new link.');
             return Response::redirect('/email/verify');
         }
+
+        $email = strtolower((string) $payload['email']);
 
         $user = User::query()->where('email', $email)->first();
 
@@ -70,12 +77,22 @@ class EmailVerificationController
 
     public function resend(Request $request): Response
     {
-        $email = strtolower(trim((string) $request->input('email', '')));
+        try {
+            $payload = $request->validate([
+                'email' => ['required', 'email'],
+            ]);
+        } catch (ValidationException $exception) {
+            $messages = array_map(static fn (array $errors): string => (string) ($errors[0] ?? ''), $exception->errors());
 
-        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            Session::set('verification_errors', ['email' => 'Enter a valid email address.']);
+            Session::set('verification_errors', $messages);
+            Session::set('verification_old', [
+                'email' => $request->input('email'),
+            ]);
+
             return Response::redirect('/email/verify');
         }
+
+        $email = strtolower((string) $payload['email']);
 
         $user = User::query()->where('email', $email)->first();
 
@@ -92,6 +109,7 @@ class EmailVerificationController
         EmailVerificationService::send($user);
 
         Session::set('status', 'We have sent a fresh verification link to your email address.');
+        Session::remove('verification_old');
 
         return Response::redirect('/email/verify');
     }

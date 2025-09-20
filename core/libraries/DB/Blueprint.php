@@ -249,6 +249,16 @@ class Blueprint
         return $this;
     }
 
+    public function getTable(): string
+    {
+        return $this->table;
+    }
+
+    public function isCreating(): bool
+    {
+        return $this->action === 'create';
+    }
+
     /** Render SQL statements for the blueprint. */
     public function toSql(): array
     {
@@ -256,12 +266,19 @@ class Blueprint
             $definitions = [];
 
             foreach ($this->columns as $column) {
-                $definitions[] = $column instanceof ColumnDefinition ? $column->toSql() : $column;
+                if ($column instanceof ColumnDefinition) {
+                    $definitions[] = $column->toSql();
+                    if ($foreign = $column->compileForeignKey()) {
+                        $definitions[] = $foreign;
+                    }
+                } else {
+                    $definitions[] = $column;
+                }
             }
 
             $definitions = array_merge($definitions, $this->indexes);
             $columns = implode(",
-    ", $definitions);
+", $definitions);
 
             return [sprintf("CREATE TABLE `%s` (
     %s
@@ -273,6 +290,9 @@ class Blueprint
         foreach ($this->operations as $operation) {
             if ($operation instanceof ColumnDefinition) {
                 $operations[] = 'ADD COLUMN ' . $operation->toSql();
+                if ($foreign = $operation->compileForeignKey()) {
+                    $operations[] = $foreign;
+                }
             } else {
                 $operations[] = $operation;
             }
@@ -347,6 +367,11 @@ class ColumnDefinition
     private bool $unsigned = false;
     private bool $defaultSet = false;
     private mixed $defaultValue = null;
+    private ?string $foreignTable = null;
+    private ?string $foreignColumn = null;
+    private ?string $onDelete = null;
+    private ?string $onUpdate = null;
+    private ?string $foreignName = null;
 
     public function __construct(
         private Blueprint $blueprint,
@@ -398,6 +423,58 @@ class ColumnDefinition
         return $this;
     }
 
+    public function references(string $column): self
+    {
+        $this->foreignColumn = $column;
+        $this->registerForeignKey();
+
+        return $this;
+    }
+
+    public function on(string $table): self
+    {
+        $this->foreignTable = $table;
+        $this->registerForeignKey();
+
+        return $this;
+    }
+
+    public function constrained(?string $table = null, string $column = 'id'): self
+    {
+        if ($table === null) {
+            $table = $this->guessForeignTableFromColumn();
+        }
+
+        $this->references($column);
+        $this->on($table);
+
+        return $this;
+    }
+
+    public function onDelete(string $action): self
+    {
+        $this->onDelete = strtoupper($action);
+        $this->registerForeignKey();
+
+        return $this;
+    }
+
+    public function onUpdate(string $action): self
+    {
+        $this->onUpdate = strtoupper($action);
+        $this->registerForeignKey();
+
+        return $this;
+    }
+
+    public function foreignKeyName(string $name): self
+    {
+        $this->foreignName = $name;
+        $this->registerForeignKey();
+
+        return $this;
+    }
+
     public function useCurrent(): self
     {
         return $this->default('CURRENT_TIMESTAMP');
@@ -416,6 +493,36 @@ class ColumnDefinition
         return $definition;
     }
 
+    public function compileForeignKey(): ?string
+    {
+        if ($this->foreignTable === null || $this->foreignColumn === null) {
+            return null;
+        }
+
+        $name = $this->foreignName ?? $this->generateForeignKeyName();
+        $constraint = sprintf(
+            'CONSTRAINT `%s` FOREIGN KEY (`%s`) REFERENCES `%s` (`%s`)',
+            $name,
+            $this->column,
+            $this->foreignTable,
+            $this->foreignColumn
+        );
+
+        if ($this->onDelete !== null) {
+            $constraint .= ' ON DELETE ' . $this->onDelete;
+        }
+
+        if ($this->onUpdate !== null) {
+            $constraint .= ' ON UPDATE ' . $this->onUpdate;
+        }
+
+        if ($this->blueprint->isCreating()) {
+            return $constraint;
+        }
+
+        return 'ADD ' . $constraint;
+    }
+
     protected function compileType(): string
     {
         $type = $this->type;
@@ -425,6 +532,43 @@ class ColumnDefinition
         }
 
         return $type;
+    }
+
+    public function getColumn(): string
+    {
+        return $this->column;
+    }
+
+    protected function registerForeignKey(): void
+    {
+        if ($this->foreignTable === null || $this->foreignColumn === null) {
+            return;
+        }
+
+        $this->foreignName ??= $this->generateForeignKeyName();
+    }
+
+    protected function generateForeignKeyName(): string
+    {
+        $table = $this->blueprint->getTable();
+        $base = sprintf('fk_%s_%s', $table, $this->column);
+
+        return substr($base, 0, 64);
+    }
+
+    protected function guessForeignTableFromColumn(): string
+    {
+        $column = $this->column;
+
+        if (str_ends_with($column, '_id')) {
+            $column = substr($column, 0, -3);
+        }
+
+        if (!str_ends_with($column, 's')) {
+            $column .= 's';
+        }
+
+        return $column;
     }
 
     protected function formatDefault(mixed $value): string

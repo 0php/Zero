@@ -111,3 +111,5 @@ Use `App\Middlewares\Auth` to guard protected routes. The middleware stores the 
 Pair it with `App\Middlewares\Guest` for routes like login, registration, and password resets so authenticated users skip directly to their intended page instead of revisiting the auth forms.
 
 Future enhancements (tracked in `todo.md`) include CSRF protection, richer role/permission guards, and queued mail delivery.
+
+- The `UsersTableSeeder` seeds sample accounts for quick testing; run `php zero db:seed` to populate the table.

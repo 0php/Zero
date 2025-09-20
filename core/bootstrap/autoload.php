@@ -1,5 +1,11 @@
 <?php
 
+// Include Composer's autoloader if present so third-party packages are available.
+$composerAutoload = base('vendor/autoload.php');
+if (file_exists($composerAutoload)) {
+    require_once $composerAutoload;
+}
+
 // Initialize the kernel if it isn't set already
 $kernel = isset($kernel) ? $kernel : require_once(core_path('kernel.php'));
 // Get the aliases from the kernel configuration
@@ -107,6 +113,18 @@ spl_autoload_register(function ($className) use ($aliases) {
     if(strpos($className, 'App\Middlewares') !== false) {
         $className = str_replace('App\Middlewares\\', '', $className);
         $class_path = app_path('middlewares/' . str_replace('\\', '/', $className) . '.php');
+
+        if (file_exists($class_path)) {
+            require_once $class_path;
+            return;
+        }
+    }
+
+    // Handle classes in the Database\Seeders namespace
+    if (str_starts_with($className, 'Database\\Seeders')) {
+        $className = str_replace('Database\\Seeders\\', '', $className);
+        $relative = str_replace('\\', '/', $className);
+        $class_path = base('database/seeders/' . $relative . '.php');
 
         if (file_exists($class_path)) {
             require_once $class_path;

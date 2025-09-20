@@ -127,6 +127,51 @@ By default the framework looks for a pivot table named after the two related mod
 
 Calling `withTimestamps()` instructs the relation to maintain `created_at` / `updated_at` (or custom column names you provide) on the pivot entries during `attach` and `sync` operations.
 
+### UUID Primary Keys
+
+Set the following properties on your model to generate a v4 UUID automatically when inserting new records:
+
+```php
+class ApiToken extends Model
+{
+    protected bool $incrementing = false;
+    protected bool $usesUuid = true;
+    protected ?string $uuidColumn = 'id'; // optional, defaults to the primary key
+}
+```
+
+Make sure your migration creates a UUID column (see [UUID Columns](#uuid-columns)) and stores it as the primary key. The framework generates RFC 4122 compliant strings using PHP's `random_bytes`, so no external dependency is required.
+
+## Lifecycle Hooks
+
+Override these optional methods on your models to run domain logic around persistence events:
+
+- `beforeCreate` / `afterCreate`
+- `beforeUpdate` / `afterUpdate`
+- `beforeSave` / `afterSave` (fire for both create and update flows)
+- `beforeDelete` / `afterDelete`
+
+Each hook receives the model instance via `$this`, so you can mutate attributes, enforce validation, dispatch events, or abort by throwing an exception before the write occurs. Hooks only fire when you override them—base models with no overrides incur no runtime overhead.
+
+## UUID Columns
+
+The schema builder ships two helpers:
+
+```php
+Schema::create('api_tokens', function (Blueprint $table) {
+    $table->uuidPrimary();
+    $table->foreignId('user_id')->constrained();
+    $table->string('name');
+    $table->timestamps();
+});
+
+Schema::table('users', function (Blueprint $table) {
+    $table->uuid('external_id')->unique();
+});
+```
+
+`uuid()` creates a `CHAR(36)` column, while `uuidPrimary()` marks it as the table's primary key.
+
 ## Deleting & Refreshing
 
 ```php

@@ -12,6 +12,7 @@ $aliases = [
     'Auth' => Zero\Lib\Auth\Auth::class,
     'Mail' => Zero\Lib\Mail\Mailer::class,
     'Log' => Zero\Lib\Log::class,
+    'Str' => Zero\Lib\Support\Str::class,
 ];
 
 $helpers =  [

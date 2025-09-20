@@ -70,6 +70,7 @@ The model layer ships with lightweight relationship helpers inspired by Eloquent
 - `hasOne(Related::class, $foreignKey = null, $localKey = null)`
 - `hasMany(Related::class, $foreignKey = null, $localKey = null)`
 - `belongsTo(Related::class, $foreignKey = null, $ownerKey = null)`
+- `belongsToMany(Related::class, $pivotTable = null, $foreignPivotKey = null, $relatedPivotKey = null, $parentKey = null, $relatedKey = null)`
 
 ```php
 class Post extends Model
@@ -93,6 +94,38 @@ $author = Post::find(5)?->author; // Single User model or null
 ```
 
 Relationship results are lazy-loaded and cached the first time you access them. Use `$model->relationLoaded('posts')` to check the cache, or `$model->setRelation('posts', $collection)` when eager loading manually.
+
+### Many-to-Many
+
+```php
+class User extends Model
+{
+    public function roles()
+    {
+        return $this->belongsToMany(Role::class);
+    }
+}
+
+class Role extends Model
+{
+    public function users()
+    {
+        return $this->belongsToMany(User::class);
+    }
+}
+
+$user = User::find(1);
+$user?->roles()->attach(3);            // insert into role_users
+$user?->roles()->sync([3, 5]);         // keep only roles 3 and 5
+$user?->roles()->detach(5);            // remove one role
+
+// Add pivot metadata with timestamps
+$user?->roles()->withTimestamps()->attach(7, ['granted_by' => 2]);
+```
+
+By default the framework looks for a pivot table named after the two related models using singular table names in alphabetical order with the final segment pluralised (e.g. `Role` + `User` ⇒ `role_users`). Pass the table name explicitly to `belongsToMany()` when your schema deviates from that convention. The relation proxies query builder methods, so you can chain constraints (`$user->roles()->where('roles.active', 1)->getResults()`) before fetching results.
+
+Calling `withTimestamps()` instructs the relation to maintain `created_at` / `updated_at` (or custom column names you provide) on the pivot entries during `attach` and `sync` operations.
 
 ## Deleting & Refreshing
 

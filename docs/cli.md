@@ -96,6 +96,19 @@ Seeders extend `Zero\Lib\DB\Seeder` and live in `database/seeders`. Execute a se
 php zero db:seed Database\\Seeders\\UsersTableSeeder
 ```
 
+### Update to Latest Release
+
+```bash
+php zero update:latest [--yes]
+```
+
+- Fetches a JSON manifest from the URL configured via `UPDATE_MANIFEST_URL`.
+- Displays the target version and files that will be updated before applying changes.
+- Downloads each file securely (with optional SHA-256 verification when provided in the manifest).
+- Prompts for confirmation unless `--yes` is supplied.
+
+After updating, review release notes, clear caches, and run migrations as needed.
+
 ### Customising Stubs
 
 Stub templates live under `core/templates`. Adjust `controller.tmpl` or `model.tmpl` (or add new files) to change the generated skeletons.

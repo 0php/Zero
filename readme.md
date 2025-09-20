@@ -121,12 +121,14 @@ zero                # CLI entry point for serving and scaffolding
 | `php zero migrate:rollback [steps]` | Roll back the latest migration batches. |
 | `php zero make:seeder Name [--force]` | Generate a seeder class in `database/seeders`. |
 | `php zero db:seed [FQN]` | Run a seeder (defaults to `Database\\Seeders\\DatabaseSeeder`). |
+| `php zero update:latest [--yes]` | Download and apply the latest release from the configured manifest. |
 
 ## Configuration
 - Environment variables are loaded in priority order: `.env` → `.env.staging` → `.env.production`, with `${VAR}` interpolation and array syntax `[a,b,c]` support.
 - Database connections live in `config/database.php` with drivers for MySQL, PostgreSQL, and SQLite. Switch drivers via `DB_CONNECTION` or driver-specific env vars (`MYSQL_HOST`, `SQLITE_DATABASE`, etc.).
 - Sessions default to the database driver via `config/session.php`; adjust lifetime, cookie name, or fall back to file storage with `SESSION_DRIVER=file`.
 - Logging is defined in `config/logging.php`. Switch between file and database channels with `LOG_DRIVER`, and point the database channel at a custom table via `LOG_TABLE`.
+- Updater settings live in `config/update.php`. Set `UPDATE_MANIFEST_URL` (and optional `UPDATE_TIMEOUT`) to enable the `update:latest` command.
 - Update `config/view.php`, `config/storage.php`, and other config files to match your deployment needs.
 
 ## Deployment

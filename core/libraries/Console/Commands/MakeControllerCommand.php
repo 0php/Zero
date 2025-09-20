@@ -6,7 +6,7 @@ namespace Zero\Lib\Console\Commands;
 
 use Zero\Lib\Console\Command\CommandInterface;
 use Zero\Lib\Console\Support\Filesystem;
-use Zero\Lib\Console\Support\Str;
+use Zero\Lib\Support\Str;
 use Zero\Lib\Template;
 
 final class MakeControllerCommand implements CommandInterface

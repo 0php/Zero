@@ -198,9 +198,11 @@ class Model implements JsonSerializable
     /**
      * Mass-assign the provided attributes and persist the model.
      */
-    public function update(array $attributes): bool
+    public function update(?array $attributes = null): bool
     {
-        $this->fill($attributes);
+        if(!is_null($attributes)) {
+            $this->fill($attributes);   
+        }
 
         return $this->save();
     }

@@ -9,6 +9,7 @@ use Zero\Lib\Crypto;
 use Zero\Lib\Http\Request;
 use Zero\Lib\Http\Response;
 use Zero\Lib\Session;
+use Zero\Lib\Validation\ValidationException;
 
 class AuthController
 {
@@ -23,14 +24,14 @@ class AuthController
         }
 
         $status = Session::get('status');
-        $error = Session::get('auth_error');
-        $email = Session::get('auth_email');
+        $errors = Session::get('auth_errors') ?? [];
+        $old = Session::get('auth_old') ?? [];
 
         Session::remove('status');
-        Session::remove('auth_error');
-        Session::remove('auth_email');
+        Session::remove('auth_errors');
+        Session::remove('auth_old');
 
-        return view('auth/login', compact('status', 'error', 'email'));
+        return view('auth/login', compact('status', 'errors', 'old'));
     }
 
     /**
@@ -38,17 +39,27 @@ class AuthController
      */
     public function login(Request $request): Response
     {
-        $email = strtolower(trim((string) $request->input('email', '')));
-        $password = (string) $request->input('password', '');
+        Session::remove('auth_errors');
+        Session::remove('auth_old');
 
-        Session::remove('auth_error');
-        Session::remove('auth_email');
+        try {
+            $credentials = $request->validate([
+                'email' => ['required', 'email'],
+                'password' => ['required', 'string'],
+            ]);
+        } catch (ValidationException $exception) {
+            $messages = array_map(static fn (array $errors): string => (string) ($errors[0] ?? ''), $exception->errors());
 
-        if ($email === '' || $password === '') {
-            Session::set('auth_error', 'Email and password are required.');
-            Session::set('auth_email', $email);
+            Session::set('auth_errors', $messages);
+            Session::set('auth_old', [
+                'email' => $request->input('email'),
+            ]);
+
             return Response::redirect('/login');
         }
+
+        $email = strtolower((string) $credentials['email']);
+        $password = (string) $credentials['password'];
 
         /** @var User|null $user */
         $user = User::query()
@@ -57,13 +68,13 @@ class AuthController
             ->first();
 
         if (! $user instanceof User || ! Crypto::validate($password, (string) $user->password)) {
-            Session::set('auth_error', 'Invalid credentials provided.');
-            Session::set('auth_email', $email);
+            Session::set('auth_errors', ['email' => 'Invalid credentials provided.']);
+            Session::set('auth_old', ['email' => $email]);
             return Response::redirect('/login');
         }
 
         if (! $user->isEmailVerified()) {
-            Session::set('auth_email', $email);
+            Session::set('auth_old', ['email' => $email]);
             Session::set('status', 'Please verify your email address before signing in. We have sent you a new verification link.');
             EmailVerificationService::send($user);
 
@@ -75,6 +86,9 @@ class AuthController
             'name' => $user->name ?? $user->email ?? 'User',
             'email' => $user->email ?? null,
         ]);
+
+        Session::remove('auth_old');
+        Session::remove('auth_errors');
 
         $intended = Session::get('auth_redirect');
         Session::remove('auth_redirect');

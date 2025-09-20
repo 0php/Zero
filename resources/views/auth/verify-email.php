@@ -17,23 +17,23 @@ View::startSection('content');
         </div>
     <?php endif; ?>
 
-    <?php if (!empty($errors['email'] ?? '')): ?>
-        <div class="alert alert-danger" role="alert">
-            {{ $errors['email'] ?? '' }}
-        </div>
-    <?php endif; ?>
-
     <div class="card shadow-sm p-4">
         <form method="POST" action="/email/verification-notification" class="mb-3">
             <div class="mb-3">
                 <label for="email" class="form-label">Resend verification link</label>
                 <input
                     type="email"
-                    class="form-control"
+                    class="form-control {{ isset($errors['email']) ? 'is-invalid' : '' }}"
                     id="email"
                     name="email"
+                    value="{{ $old['email'] ?? '' }}"
                     required
                 >
+                <?php if (isset($errors['email'])): ?>
+                    <div class="invalid-feedback">
+                        {{ $errors['email'] ?? '' }}
+                    </div>
+                <?php endif; ?>
             </div>
 
             <div class="d-grid gap-2">

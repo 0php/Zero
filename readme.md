@@ -145,6 +145,7 @@ zero                # CLI entry point for serving and scaffolding
 | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `php zero serve [--host] [--port] [--root] [--watch] [--franken] [--swolee]` | Run the development server (with optional file watching or alternative backends). |
 | `php zero make:controller Name [--force]`                                    | Generate a controller scaffold under `app/controllers`.                           |
+| `php zero make:service Name [--force]`                                       | Generate a service class in `app/services`.                                       |
 | `php zero make:model Name [--force]`                                         | Generate an active-record model in `app/models`.                                  |
 | `php zero make:migration Name [--force]`                                     | Create a timestamped migration in `database/migrations`.                          |
 | `php zero migrate`                                                           | Apply outstanding migrations.                                                     |

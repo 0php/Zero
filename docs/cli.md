@@ -58,6 +58,18 @@ Rollback the latest batch:
 php zero migrate:rollback [steps]
 ```
 
+Reset the database by rolling back every batch and rerunning all migrations:
+
+```bash
+php zero migrate:refresh
+```
+
+Drop every table (ignoring individual `down()` methods) before running migrations from scratch:
+
+```bash
+php zero migrate:fresh
+```
+
 Migrations leverage the lightweight schema builder:
 
 ```php

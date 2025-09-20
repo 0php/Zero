@@ -196,6 +196,16 @@ class Model implements JsonSerializable
     }
 
     /**
+     * Mass-assign the provided attributes and persist the model.
+     */
+    public function update(array $attributes): bool
+    {
+        $this->fill($attributes);
+
+        return $this->save();
+    }
+
+    /**
      * Delete the model from the database.
      */
     public function delete(): bool

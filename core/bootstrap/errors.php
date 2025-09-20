@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Zero\Lib\Log;
 use Zero\Lib\Http\Response as HttpResponse;
+use Zero\Lib\Validation\ValidationException;
 
 if (!function_exists('zero_render_exception_page')) {
     function zero_render_exception_page(\Throwable $e): string
@@ -134,10 +135,16 @@ if (!function_exists('zero_build_error_response')) {
         };
 
         if ($expectsJson) {
-            return HttpResponse::json([
+            $payload = [
                 'status' => $status,
                 'message' => $message,
-            ], $status);
+            ];
+
+            if (array_key_exists('errors', $context)) {
+                $payload['errors'] = $context['errors'];
+            }
+
+            return HttpResponse::json($payload, $status);
         }
 
         $viewData = array_merge($context, [
@@ -156,6 +163,28 @@ if (!function_exists('zero_build_error_response')) {
         }
 
         if ($html === null) {
+            $errorList = '';
+
+            if (!empty($context['errors']) && is_array($context['errors'])) {
+                $items = '';
+
+                foreach ($context['errors'] as $field => $messages) {
+                    if (!is_array($messages)) {
+                        $messages = [$messages];
+                    }
+
+                    foreach ($messages as $msg) {
+                        $safeField = htmlspecialchars((string) $field, ENT_QUOTES, 'UTF-8');
+                        $safeMsg = htmlspecialchars((string) $msg, ENT_QUOTES, 'UTF-8');
+                        $items .= "<li><strong>{$safeField}:</strong> {$safeMsg}</li>";
+                    }
+                }
+
+                if ($items !== '') {
+                    $errorList = "<ul class=\"errors\">{$items}</ul>";
+                }
+            }
+
             $title = htmlspecialchars((string) ($context['title'] ?? 'Error ' . $status), ENT_QUOTES, 'UTF-8');
             $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
 
@@ -172,12 +201,15 @@ if (!function_exists('zero_build_error_response')) {
             .wrapper { max-width: 520px; padding: 40px; border-radius: 12px; background: #161b22; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.35); }
             h1 { margin: 0 0 12px; font-size: 2.5rem; color: #58a6ff; }
             p { margin: 0; line-height: 1.6; color: #8b949e; }
+            ul.errors { text-align: left; margin: 24px 0 0; padding: 0 0 0 20px; }
+            ul.errors li { margin-bottom: 8px; color: #f77669; }
         </style>
     </head>
     <body>
         <div class="wrapper">
             <h1>{$title}</h1>
             <p>{$safeMessage}</p>
+            {$errorList}
         </div>
     </body>
 </html>
@@ -206,6 +238,28 @@ set_error_handler(static function ($severity, $message, $file, $line) {
 });
 
 set_exception_handler(static function (\Throwable $e) use ($debug): void {
+    if ($e instanceof ValidationException) {
+        if (PHP_SAPI === 'cli') {
+            fwrite(STDERR, $e->getMessage() . PHP_EOL);
+
+            foreach ($e->errors() as $field => $messages) {
+                foreach ($messages as $message) {
+                    fwrite(STDERR, sprintf(" - %s: %s\n", $field, $message));
+                }
+            }
+
+            return;
+        }
+
+        zero_http_error_response(422, [
+            'title' => 'Unprocessable Entity',
+            'message' => 'The submitted data was invalid.',
+            'errors' => $e->errors(),
+        ]);
+
+        return;
+    }
+
     Log::error($e->getMessage(), [
         'exception' => get_class($e),
         'file' => $e->getFile(),

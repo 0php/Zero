@@ -8,6 +8,7 @@ use Zero\Lib\Crypto;
 use Zero\Lib\Http\Request;
 use Zero\Lib\Http\Response;
 use Zero\Lib\Session;
+use Zero\Lib\Validation\ValidationException;
 
 class RegisterController
 {
@@ -26,28 +27,39 @@ class RegisterController
 
     public function store(Request $request): Response
     {
-        $name = trim((string) $request->input('name', ''));
-        $email = strtolower(trim((string) $request->input('email', '')));
-        $password = (string) $request->input('password', '');
-        $passwordConfirmation = (string) $request->input('password_confirmation', '');
+        try {
+            $data = $request->validate(
+                [
+                    'name' => ['required', 'string', 'min:3'],
+                    'email' => ['required', 'email', 'unique:users,email'],
+                    'password' => ['required', 'string', 'min:8', 'password:letters,numbers', 'confirmed'],
+                    'password_confirmation' => ['required', 'string'],
+                ],
+                [
+                    'password.min' => 'Passwords must contain at least :min characters.',
+                ],
+                [
+                    'password' => 'password',
+                    'password_confirmation' => 'password confirmation',
+                ]
+            );
+        } catch (ValidationException $exception) {
+            $messages = array_map(static fn (array $errors): string => (string) ($errors[0] ?? ''), $exception->errors());
 
-        $errors = $this->validate($name, $email, $password, $passwordConfirmation);
-
-        if (! empty($errors)) {
-            Session::set('register_errors', $errors);
+            Session::set('register_errors', $messages);
             Session::set('register_old', [
-                'name' => $name,
-                'email' => $email,
+                'name' => $request->input('name'),
+                'email' => $request->input('email'),
             ]);
 
             return Response::redirect('/register');
         }
 
-        $hashed = Crypto::hash($password);
+        $hashed = Crypto::hash($data['password']);
 
         $user = User::create([
-            'name' => $name,
-            'email' => $email,
+            'name' => (string) $data['name'],
+            'email' => strtolower((string) $data['email']),
             'password' => $hashed,
         ]);
 
@@ -58,28 +70,4 @@ class RegisterController
         return Response::redirect('/login');
     }
 
-    private function validate(string $name, string $email, string $password, string $passwordConfirmation): array
-    {
-        $errors = [];
-
-        if ($name === '') {
-            $errors['name'] = 'Name is required.';
-        }
-
-        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $errors['email'] = 'A valid email address is required.';
-        } elseif (User::query()->where('email', $email)->exists()) {
-            $errors['email'] = 'That email address is already registered.';
-        }
-
-        if (strlen($password) < 8) {
-            $errors['password'] = 'Password must be at least 8 characters.';
-        }
-
-        if ($password !== $passwordConfirmation) {
-            $errors['password_confirmation'] = 'Password confirmation does not match.';
-        }
-
-        return $errors;
-    }
 }

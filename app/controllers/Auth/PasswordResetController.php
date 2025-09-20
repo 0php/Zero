@@ -8,6 +8,7 @@ use App\Services\Auth\PasswordResetService;
 use Zero\Lib\Http\Request;
 use Zero\Lib\Http\Response;
 use Zero\Lib\Session;
+use Zero\Lib\Validation\ValidationException;
 
 class PasswordResetController
 {
@@ -15,21 +16,33 @@ class PasswordResetController
     {
         $status = Session::get('status');
         $errors = Session::get('password_reset_errors') ?? [];
+        $old = Session::get('password_reset_old') ?? [];
 
         Session::remove('status');
         Session::remove('password_reset_errors');
+        Session::remove('password_reset_old');
 
-        return view('auth/forgot-password', compact('status', 'errors'));
+        return view('auth/forgot-password', compact('status', 'errors', 'old'));
     }
 
     public function email(Request $request): Response
     {
-        $email = strtolower(trim((string) $request->input('email', '')));
+        try {
+            $payload = $request->validate([
+                'email' => ['required', 'email'],
+            ]);
+        } catch (ValidationException $exception) {
+            $messages = array_map(static fn (array $errors): string => (string) ($errors[0] ?? ''), $exception->errors());
 
-        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            Session::set('password_reset_errors', ['email' => 'Enter a valid email address.']);
+            Session::set('password_reset_errors', $messages);
+            Session::set('password_reset_old', [
+                'email' => $request->input('email'),
+            ]);
+
             return Response::redirect('/password/forgot');
         }
+
+        $email = strtolower((string) $payload['email']);
 
         $user = User::query()->where('email', $email)->first();
 
@@ -37,6 +50,7 @@ class PasswordResetController
             PasswordResetService::sendLink($user);
         }
 
+        Session::set('password_reset_old', ['email' => $email]);
         Session::set('status', 'If that email exists in our system, we have sent a password reset link.');
 
         return Response::redirect('/password/forgot');
@@ -44,12 +58,16 @@ class PasswordResetController
 
     public function show(Request $request, string $token): Response
     {
-        $email = strtolower(trim((string) $request->input('email', '')));
-
-        if ($email === '') {
+        try {
+            $payload = $request->validate([
+                'email' => ['required', 'email'],
+            ]);
+        } catch (ValidationException $exception) {
             Session::set('status', 'Password reset link is missing the email address. Please request a new link.');
             return Response::redirect('/password/forgot');
         }
+
+        $email = strtolower((string) $payload['email']);
 
         if (! $this->tokenIsValid($email, $token)) {
             Session::set('status', 'That password reset link is invalid or expired. Please request a new one.');
@@ -68,29 +86,32 @@ class PasswordResetController
 
     public function update(Request $request): Response
     {
-        $token = (string) $request->input('token', '');
-        $email = strtolower(trim((string) $request->input('email', '')));
-        $password = (string) $request->input('password', '');
-        $passwordConfirmation = (string) $request->input('password_confirmation', '');
+        try {
+            $payload = $request->validate(
+                [
+                    'token' => ['required', 'string'],
+                    'email' => ['required', 'email'],
+                    'password' => ['required', 'string', 'min:8', 'password:letters,numbers', 'confirmed'],
+                    'password_confirmation' => ['required', 'string'],
+                ],
+                [
+                    'password.min' => 'Passwords must contain at least :min characters.',
+                ]
+            );
+        } catch (ValidationException $exception) {
+            $messages = array_map(static fn (array $errors): string => (string) ($errors[0] ?? ''), $exception->errors());
 
-        $errors = [];
+            Session::set('password_reset_errors', $messages);
 
-        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $errors['email'] = 'A valid email address is required.';
-        }
+            $token = (string) $request->input('token', '');
+            $email = (string) $request->input('email', '');
 
-        if (strlen($password) < 8) {
-            $errors['password'] = 'Password must be at least 8 characters.';
-        }
-
-        if ($password !== $passwordConfirmation) {
-            $errors['password_confirmation'] = 'Password confirmation does not match.';
-        }
-
-        if (! empty($errors)) {
-            Session::set('password_reset_errors', $errors);
             return Response::redirect('/password/reset/' . $token . '?email=' . urlencode($email));
         }
+
+        $token = (string) $payload['token'];
+        $email = strtolower((string) $payload['email']);
+        $password = (string) $payload['password'];
 
         if (! $this->tokenIsValid($email, $token)) {
             Session::set('status', 'That password reset link is invalid or expired. Please request a new one.');

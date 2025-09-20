@@ -13,6 +13,7 @@ $aliases = [
     'Mail' => Zero\Lib\Mail\Mailer::class,
     'Log' => Zero\Lib\Log::class,
     'Str' => Zero\Lib\Support\Str::class,
+    'Validator' => Zero\Lib\Validation\Validator::class,
 ];
 
 $helpers =  [

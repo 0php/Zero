@@ -110,6 +110,18 @@ class Blueprint
         return $definition;
     }
 
+    /** Add a long text column. */
+    public function longText(string $column, bool $nullable = true): ColumnDefinition
+    {
+        $definition = $this->addColumnDefinition($column, 'LONGTEXT');
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        return $definition;
+    }
+
     /** Add an ENUM column. */
     public function enum(string $column, array $allowed, bool $nullable = false, mixed $default = null): ColumnDefinition
     {
@@ -139,6 +151,24 @@ class Blueprint
         $definition->default($default);
 
         return $definition;
+    }
+
+    /** Add a UUID column (CHAR(36)) optionally marking it primary. */
+    public function uuid(string $column = 'uuid', bool $primary = false): ColumnDefinition
+    {
+        $definition = $this->addColumnDefinition($column, 'CHAR(36)');
+
+        if ($primary) {
+            $definition->primary();
+        }
+
+        return $definition;
+    }
+
+    /** Convenience helper for UUID primary keys. */
+    public function uuidPrimary(string $column = 'id'): ColumnDefinition
+    {
+        return $this->uuid($column, true);
     }
 
     /** Add a timestamp column optionally allowing null/default values. */

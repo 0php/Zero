@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zero\Lib\Console;
 
 use Zero\Lib\Console\Command\CommandInterface;
+use Zero\Lib\Console\Commands\KeyGenerateCommand;
 use Zero\Lib\Console\Commands\MakeControllerCommand;
 use Zero\Lib\Console\Commands\MakeMigrationCommand;
 use Zero\Lib\Console\Commands\MakeModelCommand;
@@ -39,6 +40,7 @@ final class Application
         $this->register(new MakeMiddlewareCommand());
         $this->register(new SeedCommand());
         $this->register(new UpdateLatestCommand());
+        $this->register(new KeyGenerateCommand());
     }
 
     public function run(array $argv): int

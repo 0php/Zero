@@ -5,6 +5,7 @@ Zero Framework is a native-PHP micro-framework that mirrors the developer ergono
 ## Table of Contents
 - [Highlights](#highlights)
 - [Requirements](#requirements)
+- [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Project Layout](#project-layout)
 - [Core Concepts](#core-concepts)
@@ -41,8 +42,22 @@ Zero Framework is a native-PHP micro-framework that mirrors the developer ergono
 - Write access to the `storage/` directory for cache, logs, and compiled views.
 - Composer is **not** required—the framework ships with its own autoloader.
 
+## Installation
+
+Get started with Zero Framework using this one-liner (replace `my-project` with your desired project name):
+
+```bash
+curl -L -o main.zip https://github.com/0php/Zero/archive/refs/heads/main.zip \
+&& unzip -q main.zip \
+&& rm main.zip \
+&& mv Zero-main my-project \
+&& cd my-project \
+&& rm -rf docs todo.md readme.md .git \
+&& php zero key:generate
+```
+
 ## Quick Start
-1. Clone the repository and enter the project directory.
+1. The installation script will create a new project and generate an application key.
 2. Copy `.env.example` to `.env` and adjust host/port or database credentials as needed.
 3. Ensure the `storage/` directory is writable (`chmod -R 775 storage`).
 4. Serve the application:

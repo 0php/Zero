@@ -150,13 +150,9 @@ Given the framework's simplicity, standard techniques apply:
 - **Blank responses**: enable `APP_DEBUG=true` temporarily (only in controlled environments) or tail PHP-FPM logs for stack traces.
 
 Happy shipping!
+
 ## Updating the Framework
 
 Configure `UPDATE_MANIFEST_URL` to point at your signed release manifest, then run:
 
-```bash
-php zero update:latest
-```
-
 Review the output, apply migrations, and restart services as required. For manual deployments, continue to use your existing workflow.
-

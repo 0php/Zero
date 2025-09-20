@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zero\Lib;
 
 use JsonSerializable;
+use ReflectionMethod;
 use RuntimeException;
 use Zero\Lib\DB\DBML;
 use Zero\Lib\Support\Paginator;
@@ -33,6 +34,16 @@ class Model implements JsonSerializable
      * Indicates whether the primary key is auto-incrementing.
      */
     protected bool $incrementing = true;
+
+    /**
+     * Automatically assign a UUID when inserting.
+     */
+    protected bool $usesUuid = false;
+
+    /**
+     * Column that should receive the generated UUID (defaults to the primary key).
+     */
+    protected ?string $uuidColumn = null;
 
     /**
      * List of attributes that are mass assignable. Empty array permits all.
@@ -186,12 +197,16 @@ class Model implements JsonSerializable
             throw new RuntimeException('Cannot delete a model without a primary key value.');
         }
 
+        $this->fireHook('beforeDelete');
+
         $deleted = $this->newBaseQuery()
             ->where($this->getPrimaryKey(), $key)
             ->delete();
 
         if ($deleted) {
             $this->exists = false;
+            $this->fireHook('afterDelete');
+            $this->syncOriginal();
         }
 
         return (bool) $deleted;
@@ -529,6 +544,11 @@ class Model implements JsonSerializable
      */
     protected function performInsert(): bool
     {
+        $this->fireHook('beforeCreate');
+        $this->fireHook('beforeSave');
+
+        $this->ensureUuidKey();
+
         $attributes = $this->attributes;
         $this->applyTimestampsForInsert($attributes);
 
@@ -543,6 +563,9 @@ class Model implements JsonSerializable
         $this->exists = true;
         $this->syncOriginal();
 
+        $this->fireHook('afterCreate');
+        $this->fireHook('afterSave');
+
         return true;
     }
 
@@ -552,17 +575,23 @@ class Model implements JsonSerializable
     protected function performUpdate(): bool
     {
         $dirty = $this->getDirty();
-        $this->applyTimestampsForUpdate($dirty);
 
         if ($dirty === []) {
             return true;
         }
+
+        $this->fireHook('beforeUpdate');
+        $this->fireHook('beforeSave');
+
+        $this->applyTimestampsForUpdate($dirty);
 
         if (array_key_exists($this->primaryKey, $dirty)) {
             unset($dirty[$this->primaryKey]);
         }
 
         if ($dirty === []) {
+            $this->fireHook('afterUpdate');
+            $this->fireHook('afterSave');
             return true;
         }
 
@@ -579,6 +608,8 @@ class Model implements JsonSerializable
         if ($affected) {
             $this->forceFill($dirty);
             $this->syncOriginal();
+            $this->fireHook('afterUpdate');
+            $this->fireHook('afterSave');
         }
 
         return (bool) $affected;
@@ -788,6 +819,25 @@ class Model implements JsonSerializable
         return $this->snakeCase($this->classBaseName()) . '_id';
     }
 
+    protected function ensureUuidKey(): void
+    {
+        if (! $this->usesUuid) {
+            return;
+        }
+
+        $column = $this->uuidColumn ?? $this->primaryKey;
+
+        if (! $column) {
+            return;
+        }
+
+        $current = $this->attributes[$column] ?? null;
+
+        if ($current === null || $current === '') {
+            $this->attributes[$column] = $this->newUuid();
+        }
+    }
+
     protected function singularTableName(string $table): string
     {
         if (str_ends_with($table, 'ies')) {
@@ -820,6 +870,45 @@ class Model implements JsonSerializable
         }
 
         return $table;
+    }
+
+    /**
+     * Lifecycle hooks. Override in child classes as needed.
+     */
+    protected function beforeCreate(): void {}
+    protected function afterCreate(): void {}
+    protected function beforeUpdate(): void {}
+    protected function afterUpdate(): void {}
+    protected function beforeSave(): void {}
+    protected function afterSave(): void {}
+    protected function beforeDelete(): void {}
+    protected function afterDelete(): void {}
+
+    protected function newUuid(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40);
+        $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80);
+
+        $hex = bin2hex($bytes);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split($hex, 4));
+    }
+
+    private function fireHook(string $method): void
+    {
+        if (!method_exists($this, $method)) {
+            return;
+        }
+
+        $reflection = new ReflectionMethod($this, $method);
+
+        if ($reflection->getDeclaringClass()->getName() === self::class) {
+            return; // Skip base no-op definitions
+        }
+
+        $reflection->setAccessible(true);
+        $reflection->invoke($this);
     }
 
     public function __get(string $key): mixed
@@ -1433,4 +1522,5 @@ class BelongsToMany extends Relation
 
         return $update;
     }
+
 }

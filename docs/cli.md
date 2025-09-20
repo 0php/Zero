@@ -96,6 +96,14 @@ Seeders extend `Zero\Lib\DB\Seeder` and live in `database/seeders`. Execute a se
 php zero db:seed Database\\Seeders\\UsersTableSeeder
 ```
 
+### Generate a Middleware
+
+```bash
+php zero make:middleware EnsureAdmin
+```
+
+Creates `app/middlewares/EnsureAdminMiddleware.php` with a `handle()` stub ready for authentication or authorization logic. Use `--force` to overwrite an existing file.
+
 ### Update to Latest Release
 
 ```bash

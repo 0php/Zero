@@ -66,6 +66,16 @@ class AuthMiddleware
 }
 ```
 
+You can also pass parameters to middleware when registering routes:
+
+```php
+Router::group(['middleware' => [AuthMiddleware::class, [RoleMiddleware::class, 'admin']]], function () {
+    Router::get('/dashboard', [DashboardController::class, 'index']);
+});
+```
+
+In this example `RoleMiddleware::handle()` receives the current request followed by `'admin'`. Any additional arguments declared after the request will be resolved from the route definition order.
+
 ## Error Handling
 
 Unexpected exceptions during route matching or controller execution are logged via the configurable logger and rendered through the central error handler (JSON for API clients, HTML error views otherwise).

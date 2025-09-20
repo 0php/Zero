@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Zero\Lib\Auth;
 
+use App\Models\User;
+
 class Auth
 {
     public const COOKIE = 'auth_token';
@@ -31,16 +33,17 @@ class Auth
     /**
      * Retrieve the decoded token payload for the current user.
      */
-    public static function user(): ?array
+    public static function user(): mixed
     {
         $token = $_COOKIE[self::COOKIE] ?? null;
         $payload = Jwt::decode($token);
 
         if ($payload === null) {
             self::logout();
+            return false;
         }
 
-        return $payload;
+        return User::query()->find($payload['sub']) ?: null;
     }
 
     /**

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
-use App\Models\User;
+use App\Models\User as UserModel;
 use Zero\Lib\DB\Seeder;
 
-class UsersTableSeeder extends Seeder
+class User extends Seeder
 {
     public function run(): void
     {
@@ -16,11 +16,14 @@ class UsersTableSeeder extends Seeder
                 'name' => 'Zero',
                 'email' => 'dev@zero.com',
                 'password' => \Zero\Lib\Crypto::hash('password'),
+                'email_verified_at' => date('Y-m-d H:i:s'),
             ]
         ];
 
         foreach ($users as $user) {
-            User::create($user);
+            $user = UserModel::create($user);
+
+            $user->assignRole('admin');
         }
     }
 }

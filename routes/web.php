@@ -8,6 +8,7 @@ use App\Controllers\Auth\PasswordResetController;
 use App\Controllers\Auth\RegisterController;
 use App\Middlewares\Auth as AuthMiddleware;
 use App\Middlewares\Guest as GuestMiddleware;
+use App\Middlewares\Role as RoleMiddleware;
 use Zero\Lib\Router;
 
 Router::get('/', [HomeController::class, 'index']);
@@ -36,7 +37,8 @@ Router::group(['prefix' => '/email'], function () {
 });
 
 // Authenticated-only routes
-Router::group(['middleware' => AuthMiddleware::class], function () {
+Router::group(['middleware' => [AuthMiddleware::class, [RoleMiddleware::class, 'admin']]], function () {
     Router::post('/logout', [AuthController::class, 'logout']);
     Router::get('/dashboard', [DashboardController::class, 'index']);
 });
+

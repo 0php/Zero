@@ -10,11 +10,13 @@ use Zero\Lib\Console\Command\CommandInterface;
 
 final class UpdateLatestCommand implements CommandInterface
 {
-    private const DEFAULT_GITHUB_API = 'https://api.github.com/repos/ZeroPHPFramework/Zero/releases/latest';
+    private const DEFAULT_GITHUB_API = 'https://api.github.com/repos/%s/releases/latest';
+    private const DEFAULT_GITHUB_COMMIT_API = 'https://api.github.com/repos/%s/commits/%s';
+    private const DEFAULT_GITHUB_BRANCH_ZIP = 'https://codeload.github.com/%s/zip/refs/heads/%s';
     private const USER_AGENT = 'ZeroFramework-Updater/1.0';
 
     /** @var string[] */
-    private array $preservePaths = ['.env', 'storage', 'sqlite'];
+    private array $preservePaths = ['.env', 'storage', 'sqlite', 'app', 'resources/views', 'routes', 'database/seeders', 'database/migrations'];
 
     public function getName(): string
     {
@@ -122,27 +124,40 @@ final class UpdateLatestCommand implements CommandInterface
      */
     private function updateFromGithub(int $timeout, array $argv): int
     {
-        if (!class_exists('\\ZipArchive')) {
+        if (!class_exists('\ZipArchive')) {
             fwrite(STDERR, "ZipArchive extension is required to perform GitHub updates.\n");
 
             return 1;
         }
 
-        $release = $this->fetchGithubRelease($timeout);
-        if ($release === null) {
+        $repo = (string) (config('update.github_repo') ?? 'ZeroPHPFramework/Zero');
+        $branch = (string) (config('update.github_branch') ?? 'main');
+
+        $release = $this->fetchGithubRelease($repo, $timeout);
+        if ($release && !empty($release['tag_name']) && !empty($release['zipball_url'])) {
+            $tag = (string) $release['tag_name'];
+            $zipUrl = (string) $release['zipball_url'];
+            $notes = $release['body'] ?? null;
+
+            return $this->applyGithubArchive($zipUrl, $tag, $notes, $timeout, $argv);
+        }
+
+        fwrite(STDOUT, "No GitHub releases found; falling back to latest commit on {$branch}.\n");
+
+        $commit = $this->fetchGithubCommit($repo, $branch, $timeout);
+        if ($commit === null) {
             return 1;
         }
 
-        $tag = (string) ($release['tag_name'] ?? '');
-        $zipUrl = (string) ($release['zipball_url'] ?? '');
-        $notes = $release['body'] ?? null;
+        $sha = substr((string) ($commit['sha'] ?? ''), 0, 7);
+        $zipUrl = sprintf(self::DEFAULT_GITHUB_BRANCH_ZIP, $repo, $branch);
+        $notes = $commit['commit']['message'] ?? null;
 
-        if ($tag === '' || $zipUrl === '') {
-            fwrite(STDERR, "GitHub release payload missing tag or asset URL.\n");
+        return $this->applyGithubArchive($zipUrl, $sha ?: $branch, $notes, $timeout, $argv);
+    }
 
-            return 1;
-        }
-
+    private function applyGithubArchive(string $zipUrl, string $tag, ?string $notes, int $timeout, array $argv): int
+    {
         $currentVersion = $this->currentVersion();
         fwrite(STDOUT, "Current version: {$currentVersion}\n");
         fwrite(STDOUT, "Available version: {$tag}\n\n");
@@ -153,18 +168,18 @@ final class UpdateLatestCommand implements CommandInterface
         }
 
         $force = in_array('--yes', $argv, true) || in_array('-y', $argv, true);
-        if (!$force && !$this->confirm('Download and apply the latest GitHub release? [y/N] ')) {
+        if (!$force && !$this->confirm('Download and apply the latest GitHub archive? [y/N] ')) {
             fwrite(STDOUT, "Update cancelled.\n");
             return 0;
         }
 
         $zipData = $this->download($zipUrl, $timeout, [
             'User-Agent: ' . self::USER_AGENT,
-            'Accept: application/vnd.github+json',
+            'Accept: application/octet-stream',
         ]);
 
         if ($zipData === null) {
-            fwrite(STDERR, "Failed to download release archive.\n");
+            fwrite(STDERR, "Failed to download archive.\n");
 
             return 1;
         }
@@ -212,14 +227,13 @@ final class UpdateLatestCommand implements CommandInterface
         fwrite(STDOUT, "Update complete.\n");
 
         if (is_string($notes) && $notes !== '') {
-            fwrite(STDOUT, "Release notes:\n{$notes}\n");
+            fwrite(STDOUT, "Notes:\n{$notes}\n");
         }
 
         fwrite(STDOUT, "Review changes, install dependencies, and run migrations as needed.\n");
 
         return 0;
     }
-
     private function fetchManifest(string $url, int $timeout): ?array
     {
         $payload = $this->download($url, $timeout);
@@ -239,10 +253,10 @@ final class UpdateLatestCommand implements CommandInterface
         return $manifest;
     }
 
-    private function fetchGithubRelease(int $timeout): ?array
+    private function fetchGithubRelease(string $repo, int $timeout): ?array
     {
-        $payload = $this->download(self::DEFAULT_GITHUB_API, $timeout, [
-            'User-Agent: ' . self::USER_AGENT,
+        $url = sprintf(self::DEFAULT_GITHUB_API, $repo);
+        $payload = $this->download($url, $timeout, [
             'Accept: application/vnd.github+json',
         ]);
 
@@ -262,17 +276,41 @@ final class UpdateLatestCommand implements CommandInterface
         return $release;
     }
 
+    private function fetchGithubCommit(string $repo, string $branch, int $timeout): ?array
+    {
+        $url = sprintf(self::DEFAULT_GITHUB_COMMIT_API, $repo, $branch);
+        $payload = $this->download($url, $timeout, [
+            'Accept: application/vnd.github+json',
+        ]);
+
+        if ($payload === null) {
+            fwrite(STDERR, "Unable to reach GitHub commit API.\n");
+
+            return null;
+        }
+
+        $commit = json_decode($payload, true);
+        if (!is_array($commit)) {
+            fwrite(STDERR, "GitHub commit API did not return valid JSON.\n");
+
+            return null;
+        }
+
+        return $commit;
+    }
+
     private function download(string $url, int $timeout, array $headers = []): ?string
     {
+        $headers = array_merge(['User-Agent: ' . self::USER_AGENT], $headers);
+
         if (function_exists('curl_init')) {
             $ch = curl_init($url);
-            $httpHeaders = array_merge(['User-Agent: ' . self::USER_AGENT], $headers);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_TIMEOUT => $timeout,
                 CURLOPT_FAILONERROR => true,
-                CURLOPT_HTTPHEADER => $httpHeaders,
+                CURLOPT_HTTPHEADER => $headers,
             ]);
             $response = curl_exec($ch);
             if ($response === false) {
@@ -289,7 +327,7 @@ final class UpdateLatestCommand implements CommandInterface
         $context = stream_context_create([
             'http' => [
                 'timeout' => $timeout,
-                'header' => implode("\r\n", array_merge(['User-Agent: ' . self::USER_AGENT], $headers)),
+                'header' => implode("\r\n", $headers),
             ],
         ]);
 

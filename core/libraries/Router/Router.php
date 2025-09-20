@@ -3,6 +3,7 @@
 namespace Zero\Lib;
 
 use Exception;
+use InvalidArgumentException;
 use Zero\Lib\Http\Request;
 use Zero\Lib\Http\Response;
 use Zero\Lib\Log;
@@ -28,7 +29,7 @@ class Router
 
         self::$prefix .= $attributes['prefix'] ?? '';
         if (isset($attributes['middleware'])) {
-            $middlewares = is_array($attributes['middleware']) ? $attributes['middleware'] : [$attributes['middleware']];
+            $middlewares = self::normalizeMiddlewareList($attributes['middleware']);
             self::$groupMiddlewares = array_merge(self::$groupMiddlewares, $middlewares);
         }
 
@@ -41,38 +42,39 @@ class Router
     /**
      * Register a route for a specific HTTP verb.
      */
-    private static function addRoute(string $method, string $route, array $action, array $middlewares = []): void
+    private static function addRoute(string $method, string $route, array $action, mixed $middlewares = null): void
     {
         $fullRoute = self::$prefix . '/' . trim($route, '/');
         $fullRoute = '/' . trim($fullRoute, '/');
 
-        $allMiddlewares = array_merge(self::$groupMiddlewares, $middlewares);
+        $normalizedMiddlewares = self::normalizeMiddlewareList($middlewares);
+        $allMiddlewares = array_merge(self::$groupMiddlewares, $normalizedMiddlewares);
 
         self::$routes[strtoupper($method)][$fullRoute] = $action;
         self::$middlewares[strtoupper($method)][$fullRoute] = $allMiddlewares;
     }
 
-    public static function get(string $route, array $action, array $middlewares = []): void
+    public static function get(string $route, array $action, mixed $middlewares = null): void
     {
         self::addRoute('GET', $route, $action, $middlewares);
     }
 
-    public static function post(string $route, array $action, array $middlewares = []): void
+    public static function post(string $route, array $action, mixed $middlewares = null): void
     {
         self::addRoute('POST', $route, $action, $middlewares);
     }
 
-    public static function put(string $route, array $action, array $middlewares = []): void
+    public static function put(string $route, array $action, mixed $middlewares = null): void
     {
         self::addRoute('PUT', $route, $action, $middlewares);
     }
 
-    public static function patch(string $route, array $action, array $middlewares = []): void
+    public static function patch(string $route, array $action, mixed $middlewares = null): void
     {
         self::addRoute('PATCH', $route, $action, $middlewares);
     }
 
-    public static function delete(string $route, array $action, array $middlewares = []): void
+    public static function delete(string $route, array $action, mixed $middlewares = null): void
     {
         self::addRoute('DELETE', $route, $action, $middlewares);
     }
@@ -142,7 +144,9 @@ class Router
     {
         $middlewares = self::$middlewares[$requestMethod][$route] ?? [];
 
-        foreach ($middlewares as $middleware) {
+        foreach ($middlewares as $definition) {
+            [$middleware, $parameters] = self::normalizeMiddleware($definition);
+
             if (!class_exists($middleware)) {
                 throw new Exception("Middleware {$middleware} not found");
             }
@@ -153,7 +157,7 @@ class Router
                 throw new Exception("Method handle not found in middleware {$middleware}");
             }
 
-            $result = self::invokeMiddleware($middlewareInstance);
+            $result = self::invokeMiddleware($middlewareInstance, $parameters);
 
             if ($result !== null) {
                 return Response::resolve($result);
@@ -294,16 +298,22 @@ class Router
     /**
      * Invoke middleware handle methods with optional dependency resolution.
      */
-    private static function invokeMiddleware(object $middleware): mixed
+    private static function invokeMiddleware(object $middleware, array $parameters = []): mixed
     {
         $method = new ReflectionMethod($middleware, 'handle');
         $arguments = [];
+        $extraIndex = 0;
 
         foreach ($method->getParameters() as $parameter) {
             $type = $parameter->getType();
 
             if ($type instanceof ReflectionNamedType && !$type->isBuiltin() && is_a($type->getName(), Request::class, true)) {
                 $arguments[] = Request::instance();
+                continue;
+            }
+
+            if ($extraIndex < count($parameters)) {
+                $arguments[] = $parameters[$extraIndex++];
                 continue;
             }
 
@@ -320,5 +330,118 @@ class Router
         }
 
         return $method->invokeArgs($middleware, $arguments);
+    }
+
+    /**
+     * Normalize middleware declarations into a consistent list of definitions.
+     */
+    private static function normalizeMiddlewareList(mixed $middlewares): array
+    {
+        if ($middlewares === null || $middlewares === []) {
+            return [];
+        }
+
+        if (is_string($middlewares)) {
+            return [$middlewares];
+        }
+
+        if (!is_array($middlewares)) {
+            throw new InvalidArgumentException('Invalid middleware configuration.');
+        }
+
+        if (self::isMiddlewareDefinitionArray($middlewares)) {
+            return [$middlewares];
+        }
+
+        $normalized = [];
+
+        foreach ($middlewares as $entry) {
+            if ($entry === null || $entry === []) {
+                continue;
+            }
+
+            if (is_string($entry)) {
+                $normalized[] = $entry;
+                continue;
+            }
+
+            if (is_array($entry) && self::isMiddlewareDefinitionArray($entry)) {
+                $normalized[] = $entry;
+                continue;
+            }
+
+            throw new InvalidArgumentException('Invalid middleware definition encountered.');
+        }
+
+        return $normalized;
+    }
+
+    private static function isMiddlewareDefinitionArray(array $value): bool
+    {
+        if ($value === [] || !self::isListArray($value)) {
+            return false;
+        }
+
+        $class = $value[0] ?? null;
+
+        if (!self::looksLikeClassString($class)) {
+            return false;
+        }
+
+        foreach (array_slice($value, 1) as $item) {
+            if (is_array($item) && self::isMiddlewareDefinitionArray($item)) {
+                return false;
+            }
+
+            if (self::looksLikeClassString($item)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function isListArray(array $array): bool
+    {
+        if ($array === []) {
+            return true;
+        }
+
+        return array_keys($array) === range(0, count($array) - 1);
+    }
+
+    private static function looksLikeClassString(mixed $value): bool
+    {
+        if (!is_string($value) || $value === '') {
+            return false;
+        }
+
+        if (str_contains($value, '\\')) {
+            return true;
+        }
+
+        return class_exists($value);
+    }
+
+    private static function normalizeMiddleware(mixed $definition): array
+    {
+        if (is_array($definition)) {
+            if (empty($definition)) {
+                throw new InvalidArgumentException('Middleware definition cannot be an empty array.');
+            }
+
+            $class = array_shift($definition);
+            if (!is_string($class)) {
+                throw new InvalidArgumentException('Middleware class name must be a string.');
+            }
+
+            return [$class, array_values($definition)];
+        }
+
+        if (!is_string($definition)) {
+            throw new InvalidArgumentException('Invalid middleware definition.');
+        }
+
+        return [$definition, []];
     }
 }

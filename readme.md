@@ -129,6 +129,7 @@ zero                # CLI entry point for serving and scaffolding
 - Sessions default to the database driver via `config/session.php`; adjust lifetime, cookie name, or fall back to file storage with `SESSION_DRIVER=file`.
 - Logging is defined in `config/logging.php`. Switch between file and database channels with `LOG_DRIVER`, and point the database channel at a custom table via `LOG_TABLE`.
 - Updater settings live in `config/update.php`. Set `UPDATE_MANIFEST_URL` (and optional `UPDATE_TIMEOUT`) to enable the `update:latest` command.
+  * Leave `UPDATE_MANIFEST_URL` blank to pull the latest GitHub release (or branch) using `UPDATE_GITHUB_REPO` and `UPDATE_GITHUB_BRANCH`.
 - Update `config/view.php`, `config/storage.php`, and other config files to match your deployment needs.
 
 ## Deployment

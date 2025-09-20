@@ -37,19 +37,34 @@ final class MakeControllerCommand implements CommandInterface
             return 1;
         }
 
-        $className = Str::ensureSuffix(Str::studly($name), 'Controller');
-        $path = app_path('controllers/' . $className . '.php');
+        // Convert namespace separators to directory separators
+        $name = str_replace('\\', '/', $name);
+        $className = Str::ensureSuffix(Str::studly(basename($name)), 'Controller');
+        
+        // Get the directory path from the name
+        $directory = dirname($name);
+        $directory = $directory === '.' ? '' : $directory . '/';
+        
+        // Build the full path
+        $path = app_path('controllers/' . $directory . $className . '.php');
 
-        if (file_exists($path) && ! $force) {
+        if (file_exists($path) && !$force) {
             fwrite(STDERR, "Controller {$className} already exists. Use --force to overwrite.\n");
-
             return 1;
         }
 
+        // Ensure the target directory exists
         Filesystem::ensureDirectory(dirname($path));
+
+        // Generate namespace based on the directory structure
+        $namespace = 'App\\Controllers';
+        if ($directory !== '') {
+            $namespace .= '\\' . str_replace('/', '\\', rtrim($directory, '/'));
+        }
 
         $contents = Template::render('controller.tmpl', [
             'class' => $className,
+            'namespace' => $namespace,
         ]);
 
         file_put_contents($path, $contents);

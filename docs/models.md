@@ -18,6 +18,7 @@ class User extends Model
 - The default table name is derived from the class (`User` → `users`). Override the `$table` property for custom names.
 - The default primary key is `id`. Change `$primaryKey` if your schema differs.
 - Timestamps (`created_at`, `updated_at`) are managed automatically; set `protected bool $timestamps = false;` to disable.
+- Opt into soft deletes per model by adding `protected bool $softDeletes = true;` and including a nullable `deleted_at` column in the table schema.
 
 ## Querying
 
@@ -152,6 +153,47 @@ Override these optional methods on your models to run domain logic around persis
 - `beforeDelete` / `afterDelete`
 
 Each hook receives the model instance via `$this`, so you can mutate attributes, enforce validation, dispatch events, or abort by throwing an exception before the write occurs. Hooks only fire when you override them—base models with no overrides incur no runtime overhead.
+
+## Soft Deletes
+
+Soft deletes allow you to hide records without removing them permanently. Enable the behaviour on a model by setting the `$softDeletes` flag:
+
+```php
+class Post extends Model
+{
+    protected bool $softDeletes = true;
+}
+```
+
+Add a nullable `deleted_at` column to your migration so the framework can track the deletion timestamp:
+
+```php
+Schema::create('posts', function (Blueprint $table) {
+    $table->id();
+    $table->string('title');
+    $table->timestamps();
+    $table->softDeletes(); // creates a nullable deleted_at column
+});
+```
+
+Once enabled, calls to `$model->delete()` (or query deletes such as `Post::query()->where(...)->delete()`) update `deleted_at` instead of issuing a hard delete. The base model also exposes helpers:
+
+- `$model->trashed()` reports whether the instance has been soft deleted.
+- `$model->restore()` clears `deleted_at` and makes the record active again.
+- `$model->forceDelete()` bypasses soft deletes and removes the row permanently.
+
+The query builder automatically excludes soft-deleted rows. Use the following scopes when you need different visibility:
+
+```php
+Post::query()->withTrashed()->get();   // includes soft-deleted posts
+Post::query()->onlyTrashed()->get();   // returns only soft-deleted posts
+Post::query()->withoutTrashed()->get(); // explicit default scope
+
+// Permanently remove matching records
+Post::query()->where('slug', 'obsolete')->forceDelete();
+```
+
+Relationship queries inherit the same behaviour; call `withTrashed()` on the relation query when you need to include soft-deleted children.
 
 ## UUID Columns
 

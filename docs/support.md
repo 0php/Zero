@@ -59,3 +59,47 @@ Available helpers include:
 
 These helpers are framework-agnostic and usable in both CLI and HTTP code paths.
 
+## Storage
+
+Namespace: `Zero\\Lib\\Storage\\Storage`
+
+The storage facade provides a thin wrapper around the configured filesystem disks. The default `local` driver writes to `storage/` and can be customised through `config/storage.php` or `.env` (`STORAGE_DISK`, `STORAGE_LOCAL_ROOT`).
+
+### Writing files
+
+```php
+use Zero\\Lib\\Storage\\Storage;
+
+$path = Storage::put('reports/latest.txt', "Report generated at " . date('c'));
+// $path === 'reports/latest.txt'
+
+// Read it back directly from the disk root
+$contents = file_get_contents(storage_path($path));
+```
+
+Pair it with uploaded files:
+
+```php
+$avatar = Request::file('avatar');
+
+if ($avatar && $avatar->isValid()) {
+    $path = $avatar->store('avatars');
+    // $path => avatars/slug-64d2c6b1e5c3.jpg
+}
+```
+
+Need a custom name?
+
+```php
+$avatar->storeAs('avatars', 'user-' . $user->id . '.jpg');
+```
+
+Additional disks can be registered in `config/storage.php`; the storage manager will throw if you request a disk that has not been configured.
+
+Create filesystem links with the CLI:
+
+```bash
+php zero storage:link
+```
+
+The command reads the `links` array in `config/storage.php` (defaults to linking `public/storage` to the `public` disk) and creates the appropriate symlinks. Ensure the web server user has permission to create the link path or run the command with suitable privileges.

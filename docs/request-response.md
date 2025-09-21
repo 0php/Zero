@@ -14,6 +14,13 @@ Zero Framework models each HTTP cycle with dedicated request and response abstra
   - `Request::ip()` – best-effort client IP detection.
 - The singleton instance is accessible via `Request::instance()` and injected automatically when a controller or middleware type-hints `Zero\Lib\Http\Request`.
 
+### Request Attributes
+
+- Middleware can prime downstream layers with `Request::set('current_user', $user)` (attributes accept any value: models, DTOs, tokens, etc.).
+- Controllers or views read stored data via `Request::get('current_user')`, `Request::attribute('current_user')`, or property access on the live instance (`Request::instance()->current_user`).
+- Attributes live for the lifetime of the current HTTP cycle. Each new request receives a fresh request instance, so nothing leaks between users.
+
+
 ### Validating Input
 
 ```php

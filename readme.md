@@ -117,6 +117,7 @@ zero                # CLI entry point for serving and scaffolding
 ### Request & Response Lifecycle
 
 - `Zero\Lib\Http\Request::capture()` snapshots query, form, JSON, file, and header data, exposing helpers like `input`, `json`, `header`, `ip`, and `expectsJson`.
+- Middleware can cache work for later using request attributes: `Request::set('key', $value)` in middleware and `Request::get('key')` (or `Request::instance()->key`) in controllers.
 - Controllers may return strings, arrays, models, iterables, or explicit `Response` objects; the router normalises everything through `Zero\Lib\Response::resolve()`.
 - Response factories cover HTML, JSON, text, redirects, streams, and opinionated API envelopes.
 

@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Zero\Lib\Support;
 
-class Paginator
+use ArrayIterator;
+use IteratorAggregate;
+use Traversable;
+
+class Paginator implements IteratorAggregate
 {
     public function __construct(
         protected array $items,
@@ -17,6 +21,11 @@ class Paginator
     public function items(): array
     {
         return $this->items;
+    }
+
+    public function getIterator(): Traversable
+    {
+        return new ArrayIterator($this->items);
     }
 
     public function total(): int

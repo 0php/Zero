@@ -23,7 +23,7 @@ trait InteractsWithJson
         return $this->dataGet($this->all(), $key, null) !== null;
     }
 
-    public function json(string $key = null, mixed $default = null): ?array
+    public function json(?string $key = null, mixed $default = null): ?array
     {
         if ($this->jsonPayload === null) {
             $this->jsonPayload = [];

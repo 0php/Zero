@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zero\Lib;
 
+use Closure;
 use JsonSerializable;
 use ReflectionMethod;
 use RuntimeException;
@@ -121,6 +122,16 @@ class Model implements JsonSerializable
     public static function query(): ModelQuery
     {
         return (new static())->newQuery();
+    }
+
+    public static function with(array|string $relations): ModelQuery
+    {
+        return static::query()->with($relations);
+    }
+
+    public static function withCount(array|string $relations): ModelQuery
+    {
+        return static::query()->withCount($relations);
     }
 
     /**
@@ -1113,6 +1124,10 @@ class ModelQuery
     protected string $deletedAtColumn = 'deleted_at';
     protected bool $includeTrashed = false;
     protected bool $onlyTrashed = false;
+    /** @var array<string, Closure|null> */
+    protected array $eagerLoads = [];
+    /** @var array<string, string> relation => alias */
+    protected array $relationCounts = [];
 
     public function __construct(
         protected string $modelClass,
@@ -1143,6 +1158,24 @@ class ModelQuery
         }
 
         return $result;
+    }
+
+    public function with(array|string $relations): self
+    {
+        foreach ($this->normalizeEagerRelations($relations) as $name => $constraint) {
+            $this->eagerLoads[$name] = $constraint;
+        }
+
+        return $this;
+    }
+
+    public function withCount(array|string $relations): self
+    {
+        foreach ($this->normalizeCountRelations($relations) as $name => $alias) {
+            $this->relationCounts[$name] = $alias;
+        }
+
+        return $this;
     }
 
     public function withTrashed(): self
@@ -1189,8 +1222,9 @@ class ModelQuery
     public function get(array|string|DBMLExpression $columns = []): array
     {
         $records = $this->preparedBuilder()->get($columns);
+        $models = array_map(fn (array $attributes) => $this->newModel($attributes, true), $records);
 
-        return array_map(fn (array $attributes) => $this->newModel($attributes, true), $records);
+        return $this->hydrateModels($models);
     }
 
     /**
@@ -1204,7 +1238,7 @@ class ModelQuery
             return null;
         }
 
-        return $this->newModel($record, true);
+        return $this->hydrateModel($this->newModel($record, true));
     }
 
     /**
@@ -1258,6 +1292,7 @@ class ModelQuery
         $paginator = $this->preparedBuilder()->paginate($perPage, $page);
 
         $items = array_map(fn (array $attributes) => $this->newModel($attributes, true), $paginator->items());
+        $items = $this->hydrateModels($items);
 
         return new Paginator($items, $paginator->total(), $paginator->perPage(), $paginator->currentPage());
     }
@@ -1270,6 +1305,7 @@ class ModelQuery
         $paginator = $this->preparedBuilder()->simplePaginate($perPage, $page);
 
         $items = array_map(fn (array $attributes) => $this->newModel($attributes, true), $paginator->items());
+        $items = $this->hydrateModels($items);
 
         return new Paginator($items, $paginator->total(), $paginator->perPage(), $paginator->currentPage());
     }
@@ -1357,6 +1393,291 @@ class ModelQuery
         $model = new $this->modelClass();
 
         return $model->getPrimaryKey();
+    }
+
+    /**
+     * @param array<string, mixed>|string $relations
+     * @return array<string, Closure|null>
+     */
+    protected function normalizeEagerRelations(array|string $relations): array
+    {
+        if (is_string($relations)) {
+            $relations = [$relations];
+        }
+
+        $normalized = [];
+
+        foreach ($relations as $key => $value) {
+            if (is_int($key)) {
+                $relation = trim((string) $value);
+                $constraint = null;
+            } else {
+                $relation = trim((string) $key);
+                $constraint = $value instanceof Closure ? $value : null;
+            }
+
+            if ($relation === '') {
+                continue;
+            }
+
+            $normalized[$relation] = $constraint;
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<int|string, mixed>|string $relations
+     * @return array<string, string>
+     */
+    protected function normalizeCountRelations(array|string $relations): array
+    {
+        if (is_string($relations)) {
+            $relations = [$relations];
+        }
+
+        $normalized = [];
+
+        foreach ($relations as $key => $value) {
+            if (is_int($key)) {
+                $expression = trim((string) $value);
+
+                if ($expression === '') {
+                    continue;
+                }
+
+                [$relation, $alias] = $this->parseCountExpression($expression);
+            } else {
+                $relation = trim((string) $key);
+
+                if ($relation === '') {
+                    continue;
+                }
+
+                $alias = is_string($value) && $value !== ''
+                    ? trim($value)
+                    : $this->guessCountAlias($relation);
+            }
+
+            if ($relation === '') {
+                continue;
+            }
+
+            if ($alias === '') {
+                $alias = $this->guessCountAlias($relation);
+            }
+
+            $normalized[$relation] = $alias;
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    protected function parseCountExpression(string $expression): array
+    {
+        $expression = trim($expression);
+
+        if ($expression === '') {
+            return ['', ''];
+        }
+
+        if (stripos($expression, ' as ') !== false) {
+            [$name, $alias] = preg_split('/\s+as\s+/i', $expression, 2);
+            $name = trim((string) ($name ?? ''));
+            $alias = trim((string) ($alias ?? ''));
+
+            if ($alias === '') {
+                $alias = $this->guessCountAlias($name);
+            }
+
+            return [$name, $alias];
+        }
+
+        return [$expression, $this->guessCountAlias($expression)];
+    }
+
+    protected function guessCountAlias(string $relation): string
+    {
+        $relation = trim($relation);
+
+        if ($relation === '') {
+            return '';
+        }
+
+        return str_replace('.', '_', $relation) . '_count';
+    }
+
+    /**
+     * @param Model[] $models
+     * @return Model[]
+     */
+    protected function hydrateModels(array $models): array
+    {
+        if ($models === []) {
+            return $models;
+        }
+
+        $this->loadRelations($models);
+        $this->appendRelationCounts($models);
+
+        return $models;
+    }
+
+    protected function hydrateModel(?Model $model): ?Model
+    {
+        if ($model === null) {
+            return null;
+        }
+
+        $this->loadRelations([$model]);
+        $this->appendRelationCounts([$model]);
+
+        return $model;
+    }
+
+    /**
+     * @param Model[] $models
+     */
+    protected function loadRelations(array $models): void
+    {
+        if ($this->eagerLoads === []) {
+            return;
+        }
+
+        foreach ($this->eagerLoads as $relation => $constraint) {
+            foreach ($models as $model) {
+                if (! $model instanceof Model) {
+                    continue;
+                }
+
+                $this->loadRelation($model, $relation, $constraint);
+            }
+        }
+    }
+
+    /**
+     * @param Model[] $models
+     */
+    protected function appendRelationCounts(array $models): void
+    {
+        if ($this->relationCounts === []) {
+            return;
+        }
+
+        foreach ($this->relationCounts as $relation => $alias) {
+            $alias = $alias === '' ? $this->guessCountAlias($relation) : $alias;
+
+            foreach ($models as $model) {
+                if (! $model instanceof Model) {
+                    continue;
+                }
+
+                $count = $this->resolveRelationCount($model, $relation);
+                $model->{$alias} = $count;
+            }
+        }
+    }
+
+    protected function loadRelation(Model $model, string $relation, ?Closure $constraint = null): void
+    {
+        $relation = trim($relation);
+
+        if ($relation === '') {
+            return;
+        }
+
+        $segments = explode('.', $relation);
+        $name = array_shift($segments);
+
+        if ($name === null || $name === '') {
+            return;
+        }
+
+        $results = null;
+
+        if ($model->relationLoaded($name)) {
+            $results = $model->getRelation($name);
+        } elseif (method_exists($model, $name)) {
+            $relationInstance = $model->{$name}();
+
+            if ($relationInstance instanceof Relation) {
+                if ($constraint instanceof Closure) {
+                    $constraint($relationInstance->getQuery());
+                }
+
+                $results = $relationInstance->getResults();
+            } else {
+                $results = $relationInstance;
+            }
+
+            $model->setRelation($name, $results);
+        }
+
+        if ($segments === []) {
+            return;
+        }
+
+        if ($results instanceof Model) {
+            $this->loadRelation($results, implode('.', $segments), null);
+
+            return;
+        }
+
+        if (is_iterable($results)) {
+            $next = implode('.', $segments);
+
+            foreach ($results as $related) {
+                if ($related instanceof Model) {
+                    $this->loadRelation($related, $next, null);
+                }
+            }
+        }
+    }
+
+    protected function resolveRelationCount(Model $model, string $relation): int
+    {
+        $relation = trim($relation);
+
+        if ($relation === '') {
+            return 0;
+        }
+
+        $name = explode('.', $relation)[0];
+
+        if ($name === '') {
+            return 0;
+        }
+
+        if (! $model->relationLoaded($name)) {
+            $this->loadRelation($model, $name, null);
+        }
+
+        $value = $model->getRelation($name);
+
+        if ($value instanceof Model) {
+            return 1;
+        }
+
+        if ($value === null) {
+            return 0;
+        }
+
+        if (is_array($value)) {
+            return count($value);
+        }
+
+        if ($value instanceof \Countable) {
+            return count($value);
+        }
+
+        if ($value instanceof \Traversable) {
+            return iterator_count($value);
+        }
+
+        return (int) $value;
     }
 
     /**

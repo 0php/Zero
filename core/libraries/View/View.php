@@ -38,59 +38,28 @@ class View
             throw new Exception("View file {$viewFile} not found.");
         }
 
-        if (self::$config['cache_enabled']) {
-            $cacheFile = self::getCacheFilePath($view);
-
-            if (!is_dir(dirname($cacheFile))) {
-                mkdir(dirname($cacheFile), 0777, true);
-            }
-
-            if (self::isCacheValid($cacheFile, $viewFile)) {
-                if (self::$config['debug']) {
-                    self::log("Using cached version of view: {$view}");
-                }
-
-                extract($data);
-                ob_start();
-                include $cacheFile;
-                $output = ob_get_clean();
-
-                self::resetState();
-
-                return $output;
-            }
-        }
+        $compiledView = self::compileTemplate($view, $viewFile);
 
         extract($data);
 
         ob_start();
-        include $viewFile;
-        $content = ob_get_clean();
+        eval('?>' . $compiledView);
+        $output = ob_get_clean();
 
         if (self::$layout) {
-            $layoutFile = base('resources/views/' . self::$layout . '.php');
+            $layout = self::$layout;
+            $layoutFile = base('resources/views/' . $layout . '.php');
 
             if (!file_exists($layoutFile)) {
                 throw new Exception("Layout file {$layoutFile} not found.");
             }
 
+            $compiledLayout = self::compileTemplate('layout:' . $layout, $layoutFile);
+
             ob_start();
-            include $layoutFile;
-            $content = ob_get_clean();
+            eval('?>' . $compiledLayout);
+            $output = ob_get_clean();
         }
-
-        $compiled = self::processDirectives($content);
-
-        if (self::$config['cache_enabled']) {
-            file_put_contents(self::getCacheFilePath($view), $compiled);
-            if (self::$config['debug']) {
-                self::log("Cached new version of view: {$view}");
-            }
-        }
-
-        ob_start();
-        eval('?>' . $compiled);
-        $output = ob_get_clean();
 
         self::resetState();
 
@@ -111,7 +80,7 @@ class View
      */
     public static function endSection(): void
     {
-        self::$sections[self::$currentSection] = self::processDirectives(ob_get_clean());
+        self::$sections[self::$currentSection] = ob_get_clean();
         self::$currentSection = null;
     }
 
@@ -193,6 +162,54 @@ class View
         $logMessage = "[{$timestamp}] {$message}\n";
         $logFile = rtrim(self::$config['cache_path'], '/') . '/views/cache/view.log';
         file_put_contents($logFile, $logMessage, FILE_APPEND);
+    }
+
+    /**
+     * Compile a view or layout file into executable PHP code.
+     */
+    private static function compileTemplate(string $identifier, string $path): string
+    {
+        $useCache = self::$config['cache_enabled'];
+        $cacheFile = null;
+
+        if ($useCache) {
+            $cacheFile = self::getCacheFilePath($identifier);
+
+            if (!is_dir(dirname($cacheFile))) {
+                mkdir(dirname($cacheFile), 0777, true);
+            }
+
+            if (self::isCacheValid($cacheFile, $path)) {
+                if (self::$config['debug']) {
+                    self::log("Using cached version of view: {$identifier}");
+                }
+
+                $cached = file_get_contents($cacheFile);
+
+                if ($cached === false) {
+                    throw new Exception("Unable to read cached view: {$cacheFile}");
+                }
+
+                return $cached;
+            }
+        }
+
+        $raw = file_get_contents($path);
+        if ($raw === false) {
+            throw new Exception("Unable to read view file: {$path}");
+        }
+
+        $compiled = self::processDirectives($raw);
+
+        if ($useCache && $cacheFile !== null) {
+            file_put_contents($cacheFile, $compiled);
+
+            if (self::$config['debug']) {
+                self::log("Cached new version of view: {$identifier}");
+            }
+        }
+
+        return $compiled;
     }
 
     /**

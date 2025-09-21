@@ -17,6 +17,7 @@ Zero Framework is a native-PHP micro-framework that mirrors the developer ergono
   - [Models](#models)
   - [Authentication](#authentication)
   - [Helpers & Facades](#helpers--facades)
+  - [Support Utilities](#support-utilities)
 - [CLI Reference](#cli-reference)
 - [Configuration](#configuration)
 - [Deployment](#deployment)
@@ -32,7 +33,7 @@ Zero Framework is a native-PHP micro-framework that mirrors the developer ergono
 - Productive router with groups, middleware pipelines, and auto dependency injection.
 - First-class HTTP abstractions: rich request helpers and flexible response factories.
 - Blade-style view engine with layouts, sections, directives, and optional caching.
-- Fluent DBML query builder, active-record models, migrations, and seeders.
+- Fluent DBML (Database Management Layer) query builder, active-record models, migrations, and seeders driven by a concise DBAL.
 - Battery-included CLI (`zero`) for serving, scaffolding, and database management.
 - SMTP mailer with fluent message composition and secure TLS defaults.
 - Centralised error handler with configurable HTML/JSON output and configurable log channels (file or database).
@@ -127,8 +128,8 @@ zero                # CLI entry point for serving and scaffolding
 
 ### Database & DBML
 
-- `Zero\Lib\DB\DBML` provides fluent query building with selections, joins, aggregates, pagination, and safe bindings.
-- Run migrations with `php zero migrate`; create new migrations via `php zero make:migration create_posts_table` and describe schema using `Zero\Lib\DB\Schema`.
+- `Zero\Lib\DB\DBML` (the Database Management Layer) provides fluent query building with selections, joins, aggregates, pagination, and safe bindings.
+- Run migrations with `php zero migrate`; create new migrations via `php zero make:migration create_posts_table` and describe schema using the migration DBAL (`Zero\Lib\DB\Schema`).
 - Seeders extend `Zero\Lib\DB\Seeder` and execute with `php zero db:seed`.
 
 ### Models
@@ -149,6 +150,11 @@ zero                # CLI entry point for serving and scaffolding
 
 - `core/kernel.php` registers lightweight facades (`View`, `DB`, `Model`, `DBML`, `Auth`, `Mail`) and autoloaded helper files.
 - Use the global `config()` helper for dot-access to `config/*.php`, and `env()` for values from `.env`, `.env.staging`, or `.env.production` (later files override earlier ones and support `${VAR}` interpolation).
+
+### Support Utilities
+
+- [`Zero\Lib\Http\Http`](docs/support.md#http-client) provides a fluent HTTP client for outbound requests (JSON helpers, timeouts, retries, file uploads).
+- [`Zero\Lib\Support\Str`](docs/support.md#string-helpers) bundles familiar string transformations (studly, camel, snake, slug, etc.) for CLI and application code.
 
 ## CLI Reference
 

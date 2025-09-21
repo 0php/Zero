@@ -2,6 +2,7 @@
 
 return [
     'connection' => env('DB_CONNECTION', 'mysql'),
+    'charset' => 'utf8mb4',
 
     'mysql' => [
         'driver' => 'mysql',

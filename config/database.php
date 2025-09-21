@@ -10,6 +10,8 @@ return [
         'database' => env('MYSQL_DATABASE', 'zero'),
         'username' => env('MYSQL_USER', 'root'),
         'password' => env('MYSQL_PASSWORD', ''),
+        'charset' => env('MYSQL_CHARSET', 'utf8mb4'),
+        'collation' => env('MYSQL_COLLATION', 'utf8mb4_general_ci'),
     ],
     'sqlite' => [
         'driver' => 'sqlite3',
@@ -22,5 +24,6 @@ return [
         'database' => env('POSTGRES_DATABASE', 'zero'),
         'username' => env('POSTGRES_USER', 'root'),
         'password' => env('POSTGRES_PASSWORD', ''),
+        'charset' => env('POSTGRES_CHARSET', 'UTF8'),
     ],
 ];

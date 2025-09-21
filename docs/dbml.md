@@ -1,5 +1,7 @@
 # DBML Query Builder
 
+Database Management Layer (DBML) provides the fluent query interface used throughout the framework. For schema changes, rely on the migration DBAL described in migrations.md.
+
 `Zero\Lib\DB\DBML` is a lightweight, fluent SQL builder that mirrors the ergonomics of Laravel's query builder while keeping dependencies to a minimum. It speaks to the framework's PDO bridge, so the same code runs against MySQL, PostgreSQL, or SQLite with no driver-specific conditionals.
 
 ## Getting Started
@@ -44,6 +46,7 @@ $users = DBML::table('users')
               ->whereNull('deleted_at')
     )
     ->whereIn('country', ['US', 'CA'])
+    ->whereInSet('roles', ['author', 'editor']) // match CSV/SET columns using FIND_IN_SET
     ->when($request->input('q'), function ($query, $term) {
         $query->where('name', 'LIKE', "%{$term}%");
     })
@@ -53,7 +56,7 @@ $users = DBML::table('users')
 Key helpers:
 
 - `where()`, `orWhere()`, `whereNot()` for basic comparisons.
-- `whereIn()`, `whereNotIn()`, `whereNull()`, `whereBetween()` and their `or...` counterparts.
+- `whereIn()`, `whereNotIn()`, `whereInSet()`, `whereNotInSet()`, `whereNull()`, `whereBetween()` and their `or...` counterparts.
 - `whereRaw()` (and `havingRaw()`) for advanced clauses while still binding values manually.
 - `when($value, $callback, $default)` to apply conditional logic without `if` blocks.
 

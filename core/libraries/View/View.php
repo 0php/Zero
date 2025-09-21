@@ -243,6 +243,12 @@ class View
      */
     private static function processDirectives(string $content): string
     {
+        $escapedTriplePlaceholder = '__ESCAPED_TRIPLE_BRACE_OPEN__';
+        $escapedDoublePlaceholder = '__ESCAPED_DOUBLE_BRACE_OPEN__';
+
+        $content = str_replace('@{{{', $escapedTriplePlaceholder, $content);
+        $content = str_replace('@{{', $escapedDoublePlaceholder, $content);
+
         $content = preg_replace_callback('/@foreach\s*\((.*?)\)\s*/', fn($matches) => "<?php foreach({$matches[1]}): ?>", $content);
         $content = str_replace('@endforeach', '<?php endforeach; ?>', $content);
 
@@ -272,6 +278,9 @@ class View
         $content = str_replace('@endsection', '<?php View::endSection(); ?>', $content);
 
         $content = preg_replace_callback('/@dd\s*\((.*?)\)\s*/', fn($matches) => "<?php dd({$matches[1]}); ?>", $content);
+
+        $content = str_replace($escapedTriplePlaceholder, '{{{', $content);
+        $content = str_replace($escapedDoublePlaceholder, '{{', $content);
 
         return $content;
     }

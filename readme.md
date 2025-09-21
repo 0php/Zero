@@ -49,6 +49,7 @@ Zero Framework is a native-PHP micro-framework that mirrors the developer ergono
 
 Get started with Zero Framework using this one-liner (replace `my-project` with your desired project name):
 
+### Mac and Linux
 ```bash
 curl -L -o main.zip https://github.com/0php/Zero/archive/refs/heads/main.zip \
 && unzip -q main.zip \
@@ -59,6 +60,16 @@ curl -L -o main.zip https://github.com/0php/Zero/archive/refs/heads/main.zip \
 && php zero key:generate
 ```
 
+### Windows
+```bash
+Invoke-WebRequest -Uri "https://github.com/0php/Zero/archive/refs/heads/main.zip" -OutFile "main.zip"; `
+Expand-Archive -Path "main.zip" -DestinationPath "." -Force; `
+Remove-Item "main.zip"; `
+Rename-Item "Zero-main" "my-project"; `
+Set-Location "my-project"; `
+Remove-Item -Recurse -Force docs, todo.md, readme.md; `
+php zero key:generate
+```
 ## Quick Start
 
 1. The installation script will create a new project and generate an application key.

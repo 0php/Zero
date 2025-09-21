@@ -12,7 +12,7 @@ MYSQL_COLLATION=utf8mb4_general_ci
 POSTGRES_CHARSET=UTF8
 ```
 
-MySQL and PostgreSQL connections pick up these values automatically (falling back to UTF-8 sensible defaults). Override them per connection if you need a different encoding.
+MySQL and PostgreSQL connections pick up these values automatically (falling back to UTF-8 sensible defaults). Override them per connection if you need a different encoding. See `.env.example` for the default values that ship with the framework.
 
 ## Table-Level Defaults
 
@@ -93,7 +93,39 @@ Schema::create('example', function ($table) {
 - `primary()`, `unique()`, `index()` – quick index/constraint helpers.
 - `charset($charset)` – override character set for the column (MySQL only).
 - `collation($collation)` / `collate($collation)` – override the column collation (MySQL only).
+- `useCurrent()` – set TIMESTAMP columns to default to `CURRENT_TIMESTAMP`.
+- `references($column)` + `on($table)` – pair to declare foreign key targets.
+- `onDelete($action)` / `onUpdate($action)` – specify cascading behaviour for foreign keys.
+- `foreignKeyName($name)` – override the generated foreign key constraint name.
 - `change()` – alter an existing column when used inside `Schema::table()`.
+
+### Foreign Keys
+
+Chain the foreign key helpers together for clarity:
+
+```php
+Schema::table('orders', function ($table) {
+    $table->foreignId('user_id')
+        ->constrained('users')
+        ->onDelete('cascade')
+        ->onUpdate('cascade');
+});
+```
+
+Prefer the explicit helpers when you need full control over names or cascading rules:
+
+```php
+Schema::table('invoices', function ($table) {
+    $table->unsignedBigInteger('customer_id');
+
+    $table->foreignId('customer_id')
+        ->references('id')
+        ->on('customers')
+        ->onDelete('restrict')
+        ->onUpdate('cascade')
+        ->foreignKeyName('invoices_customer_fk');
+});
+```
 
 ### Table Helpers
 
@@ -110,7 +142,7 @@ Schema::create('example', function ($table) {
 - `Schema::create($table, $callback)` – create a table.
 - `Schema::table($table, $callback)` – alter an existing table.
 - `Schema::drop($table)` / `dropIfExists($table)` – remove tables.
-- `Schema::dropColumn($table, $column)` – drop a column outside of a blueprint callback.
+- `Schema::dropColumn($table, $column)` / `dropColumnIfExists($table, $column)` – drop columns imperatively.
 
 ## Changing Existing Columns
 

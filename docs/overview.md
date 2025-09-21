@@ -17,6 +17,7 @@ Zero Framework is a lightweight, native-PHP micro-framework inspired by Laravel'
 - **Mailing**: `Zero\Lib\Mail\Mailer` wraps SMTP delivery with fluent message composition and dotenv-driven configuration.
 - **HTTP Client**: [`Zero\Lib\Http\Http`](support.md#http-client) exposes a fluent, cURL-backed client for outbound requests with JSON helpers and timeout configuration.
 - **String Utilities**: [`Zero\Lib\Support\Str`](support.md#string-helpers) bundles common string transformations (studly, snake, camel, slug, etc.) for CLI and app code.
+- **Storage**: [`Zero\Lib\Storage\Storage`](support.md#storage) writes files to the configured disks; uploaded files call `$file->store()` to persist content.
 
 ## Next Steps
 

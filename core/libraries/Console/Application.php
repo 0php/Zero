@@ -19,6 +19,7 @@ use Zero\Lib\Console\Commands\MigrateRefreshCommand;
 use Zero\Lib\Console\Commands\RollbackCommand;
 use Zero\Lib\Console\Commands\SeedCommand;
 use Zero\Lib\Console\Commands\ServeCommand;
+use Zero\Lib\Console\Commands\StorageLinkCommand;
 
 final class Application
 {
@@ -47,6 +48,7 @@ final class Application
         $this->register(new MakeServiceCommand());
         $this->register(new SeedCommand());
         $this->register(new KeyGenerateCommand());
+        $this->register(new StorageLinkCommand());
     }
 
     public function run(array $argv): int

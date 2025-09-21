@@ -1,5 +1,7 @@
 # DBML Query Builder
 
+Database Management Layer (DBML) provides the fluent query interface used throughout the framework. For schema changes, rely on the migration DBAL described in migrations.md.
+
 `Zero\Lib\DB\DBML` is a lightweight, fluent SQL builder that mirrors the ergonomics of Laravel's query builder while keeping dependencies to a minimum. It speaks to the framework's PDO bridge, so the same code runs against MySQL, PostgreSQL, or SQLite with no driver-specific conditionals.
 
 ## Getting Started

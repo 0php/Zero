@@ -20,12 +20,25 @@ class Blueprint
     /** @var string[] */
     protected array $indexes = [];
 
+    protected ?string $charset = null;
+    protected ?string $collation = null;
+    protected string $driver;
+
     public function __construct(
         protected string $table,
         protected string $action = 'table'
     ) {
         if (!in_array($this->action, ['create', 'table'], true)) {
             throw new InvalidArgumentException('Invalid blueprint action.');
+        }
+
+        $connection = config('database.connection');
+        $connectionConfig = config('database.' . $connection) ?? [];
+        $this->driver = (string) ($connectionConfig['driver'] ?? $connection);
+
+        if ($this->driver === 'mysql') {
+            $this->charset = $connectionConfig['charset'] ?? null;
+            $this->collation = $connectionConfig['collation'] ?? null;
         }
     }
 
@@ -279,6 +292,36 @@ class Blueprint
         return $this;
     }
 
+    public function charset(string $charset): self
+    {
+        if ($this->driver !== 'mysql') {
+            return $this;
+        }
+
+        if ($this->action === 'create') {
+            $this->charset = $charset;
+        } else {
+            $this->operations[] = sprintf('DEFAULT CHARACTER SET = %s', $charset);
+        }
+
+        return $this;
+    }
+
+    public function collation(string $collation): self
+    {
+        if ($this->driver !== 'mysql') {
+            return $this;
+        }
+
+        if ($this->action === 'create') {
+            $this->collation = $collation;
+        } else {
+            $this->operations[] = sprintf('COLLATE = %s', $collation);
+        }
+
+        return $this;
+    }
+
     public function getTable(): string
     {
         return $this->table;
@@ -287,6 +330,21 @@ class Blueprint
     public function isCreating(): bool
     {
         return $this->action === 'create';
+    }
+
+    public function getDriver(): string
+    {
+        return $this->driver;
+    }
+
+    public function getDefaultCharset(): ?string
+    {
+        return $this->charset;
+    }
+
+    public function getDefaultCollation(): ?string
+    {
+        return $this->collation;
     }
 
     /** Render SQL statements for the blueprint. */
@@ -310,17 +368,36 @@ class Blueprint
             $columns = implode(",
 ", $definitions);
 
-            return [sprintf("CREATE TABLE `%s` (
+            $statement = sprintf("CREATE TABLE `%s` (
     %s
-)", $this->table, $columns)];
+)", $this->table, $columns);
+
+            if ($this->driver === 'mysql') {
+                $options = [];
+
+                if ($this->charset !== null) {
+                    $options[] = 'DEFAULT CHARACTER SET ' . $this->charset;
+                }
+
+                if ($this->collation !== null) {
+                    $options[] = 'COLLATE ' . $this->collation;
+                }
+
+                if (!empty($options)) {
+                    $statement .= ' ' . implode(' ', $options);
+                }
+            }
+
+            return [$statement];
         }
 
         $operations = [];
 
         foreach ($this->operations as $operation) {
             if ($operation instanceof ColumnDefinition) {
-                $operations[] = 'ADD COLUMN ' . $operation->toSql();
-                if ($foreign = $operation->compileForeignKey()) {
+                $keyword = $operation->isChange() ? 'MODIFY COLUMN ' : 'ADD COLUMN ';
+                $operations[] = $keyword . $operation->toSql();
+                if (!$operation->isChange() && ($foreign = $operation->compileForeignKey())) {
                     $operations[] = $foreign;
                 }
             } else {
@@ -402,6 +479,9 @@ class ColumnDefinition
     private ?string $onDelete = null;
     private ?string $onUpdate = null;
     private ?string $foreignName = null;
+    private ?string $charset = null;
+    private ?string $collation = null;
+    private bool $change = false;
 
     public function __construct(
         private Blueprint $blueprint,
@@ -510,10 +590,53 @@ class ColumnDefinition
         return $this->default('CURRENT_TIMESTAMP');
     }
 
+    public function charset(string $charset): self
+    {
+        if ($this->blueprint->getDriver() !== 'mysql') {
+            return $this;
+        }
+
+        $this->charset = $charset;
+
+        return $this;
+    }
+
+    public function collation(string $collation): self
+    {
+        if ($this->blueprint->getDriver() !== 'mysql') {
+            return $this;
+        }
+
+        $this->collation = $collation;
+
+        return $this;
+    }
+
+    public function collate(string $collation): self
+    {
+        return $this->collation($collation);
+    }
+
+    public function change(): self
+    {
+        $this->change = true;
+
+        return $this;
+    }
+
     public function toSql(): string
     {
         $type = $this->compileType();
         $definition = sprintf('`%s` %s', $this->column, $type);
+
+        if ($this->charset !== null) {
+            $definition .= ' CHARACTER SET ' . $this->charset;
+        }
+
+        if ($this->collation !== null) {
+            $definition .= ' COLLATE ' . $this->collation;
+        }
+
         $definition .= $this->nullable ? ' NULL' : ' NOT NULL';
 
         if ($this->defaultSet) {
@@ -525,6 +648,10 @@ class ColumnDefinition
 
     public function compileForeignKey(): ?string
     {
+        if ($this->change) {
+            return null;
+        }
+
         if ($this->foreignTable === null || $this->foreignColumn === null) {
             return null;
         }
@@ -562,6 +689,11 @@ class ColumnDefinition
         }
 
         return $type;
+    }
+
+    public function isChange(): bool
+    {
+        return $this->change;
     }
 
     public function getColumn(): string

@@ -13,6 +13,8 @@ trait InteractsWithServer
     protected array $request;
     protected array $files;
     protected string $rawBody;
+    /** @var array<string, mixed> */
+    protected array $attributes = [];
 
     protected static ?self $instance = null;
 
@@ -66,6 +68,7 @@ trait InteractsWithServer
             'cookies' => [],
             'server' => [],
             'body' => '',
+            'attributes' => [],
         ];
 
         $data = array_merge($defaults, $overrides);
@@ -79,7 +82,22 @@ trait InteractsWithServer
             $data['body']
         );
 
+        if (! empty($data['attributes']) && is_array($data['attributes'])) {
+            static::$instance->attributes = $data['attributes'];
+        }
+
         return static::$instance;
+    }
+
+    public static function set(string $key, mixed $value): void
+    {
+        $instance = static::instance();
+        $instance->attributes[$key] = $value;
+    }
+
+    public static function get(string $key, mixed $default = null): mixed
+    {
+        return static::instance()->attribute($key, $default);
     }
 
     public static function __callStatic(string $name, array $arguments): mixed
@@ -91,6 +109,29 @@ trait InteractsWithServer
         }
 
         return $instance->$name(...$arguments);
+    }
+
+    public function attribute(string $key, mixed $default = null): mixed
+    {
+        return $this->attributes[$key] ?? $default;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function attributes(): array
+    {
+        return $this->attributes;
+    }
+
+    public function __get(string $name): mixed
+    {
+        return $this->attributes[$name] ?? null;
+    }
+
+    public function __isset(string $name): bool
+    {
+        return array_key_exists($name, $this->attributes);
     }
 
     public function files(): array

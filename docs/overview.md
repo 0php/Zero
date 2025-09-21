@@ -7,6 +7,7 @@ Zero Framework is a lightweight, native-PHP micro-framework inspired by Laravel'
 - **Entry point**: `public/index.php` bootstraps configuration, sessions, helpers, and delegates to the router.
 - **Routing**: `Zero\Lib\Router` maps request URIs to controller actions, manages middleware, and resolves controller dependencies.
 - **Request lifecycle**: `Zero\Lib\Http\Request` captures query, body, JSON, headers, and files into a reusable object for the duration of the request.
+- **Request attributes**: Middleware can stash data via `Request::set()` and controllers can read it later with `Request::get()` or property access on the current instance.
 - **Response pipeline**: Controllers can return any scalar, array, object, or `Zero\Lib\Http\Response`. The router normalises these via `Response::resolve()` before sending the payload to the client.
 - **Views**: `Zero\Lib\View` renders PHP templates with Blade-inspired directives, layout/section support, and optional caching.
 - **Database access (DBML)**: `Zero\Lib\DB\DBML`—the Database Management Layer—provides a fluent query builder atop the framework's PDO bridge.

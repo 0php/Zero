@@ -132,6 +132,14 @@ php zero make:middleware EnsureAdmin
 
 Creates `app/middlewares/EnsureAdminMiddleware.php` with a `handle()` stub ready for authentication or authorization logic. Use `--force` to overwrite an existing file.
 
+### Link Storage
+
+```bash
+php zero storage:link
+```
+
+Creates symbolic links defined in `config/storage.php` (by default linking `public/storage` to the public disk). The command skips existing links and reports missing targets.
+
 ### Update to Latest Release
 
 - Fetches a JSON manifest from the URL configured via `UPDATE_MANIFEST_URL`.

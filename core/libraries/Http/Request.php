@@ -14,10 +14,15 @@ use Zero\Lib\Validation\Validator;
 
 class Request
 {
-    use InteractsWithServer;
+    use InteractsWithServer {
+        InteractsWithServer::dataGet insteadof InteractsWithJson;
+        InteractsWithServer::dataGet as protected serverDataGet;
+    }
     use InteractsWithHeaders;
     use InteractsWithCookies;
-    use InteractsWithJson;
+    use InteractsWithJson {
+        InteractsWithJson::dataGet as protected jsonDataGet;
+    }
     use InteractsWithSession;
 
     /**

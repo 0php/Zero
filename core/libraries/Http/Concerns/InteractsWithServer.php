@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zero\Lib\Http\Concerns;
 
 use InvalidArgumentException;
+use Zero\Lib\Http\UploadedFile;
 
 trait InteractsWithServer
 {
@@ -28,7 +29,7 @@ trait InteractsWithServer
     ) {
         $this->query = $query;
         $this->request = $request;
-        $this->files = $files;
+        $this->files = $this->normalizeFiles($files);
         $this->server = $server;
         $this->rawBody = $rawBody;
         $this->initialiseHeaders($server);
@@ -100,6 +101,95 @@ trait InteractsWithServer
         return static::instance()->attribute($key, $default);
     }
 
+    protected function normalizeFiles(array $files): array
+    {
+        $normalized = [];
+
+        foreach ($files as $key => $value) {
+            if ($value instanceof UploadedFile) {
+                $normalized[$key] = $value;
+                continue;
+            }
+
+            if (is_array($value) && isset($value['name'])) {
+                $mapped = $this->mapUploadedFileArray($value);
+
+                if ($mapped !== null) {
+                    $normalized[$key] = $mapped;
+                }
+                continue;
+            }
+
+            if (is_array($value)) {
+                $nested = $this->normalizeFiles($value);
+
+                if ($nested !== []) {
+                    $normalized[$key] = $nested;
+                }
+            }
+        }
+
+        return $normalized;
+    }
+
+    protected function mapUploadedFileArray(array $file): mixed
+    {
+        $names = $file['name'] ?? null;
+
+        if (is_array($names)) {
+            $normalized = [];
+
+            foreach ($names as $index => $name) {
+                $item = $this->mapUploadedFileArray([
+                    'name' => $name,
+                    'type' => $file['type'][$index] ?? null,
+                    'tmp_name' => $file['tmp_name'][$index] ?? null,
+                    'error' => $file['error'][$index] ?? null,
+                    'size' => $file['size'][$index] ?? null,
+                ]);
+
+                if ($item !== null) {
+                    $normalized[$index] = $item;
+                }
+            }
+
+            return array_values($normalized);
+        }
+
+        $tmp = $file['tmp_name'] ?? null;
+
+        if ($tmp === null || $tmp === '') {
+            return null;
+        }
+
+        return new UploadedFile(
+            (string) $tmp,
+            (string) ($file['name'] ?? ''),
+            (string) ($file['type'] ?? ''),
+            (int) ($file['size'] ?? 0),
+            (int) ($file['error'] ?? UPLOAD_ERR_OK)
+        );
+    }
+
+    protected function dataGet(array $target, string $key, mixed $default = null): mixed
+    {
+        if ($key === '' || $key === null) {
+            return $target;
+        }
+
+        $segments = explode('.', $key);
+
+        foreach ($segments as $segment) {
+            if (is_array($target) && array_key_exists($segment, $target)) {
+                $target = $target[$segment];
+            } else {
+                return $default;
+            }
+        }
+
+        return $target;
+    }
+
     public static function __callStatic(string $name, array $arguments): mixed
     {
         $instance = static::instance();
@@ -132,6 +222,21 @@ trait InteractsWithServer
     public function __isset(string $name): bool
     {
         return array_key_exists($name, $this->attributes);
+    }
+
+    public function file(string $key, mixed $default = null): mixed
+    {
+        $value = $this->dataGet($this->files, $key, $default);
+
+        if ($value instanceof UploadedFile) {
+            return $value;
+        }
+
+        if (is_array($value)) {
+            return $value === [] ? $default : $value;
+        }
+
+        return $default;
     }
 
     public function files(): array

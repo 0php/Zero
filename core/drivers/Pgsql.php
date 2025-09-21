@@ -51,10 +51,12 @@ class PgsqlDriver {
     public function createConnection() {
         try {
             // Build DSN string with optional port configuration
+            $charset = $this->config['charset'] ?? 'UTF8';
             $dsn = sprintf(
-                'pgsql:host=%s;dbname=%s;options=\'--client_encoding=UTF8\'',
+                "pgsql:host=%s;dbname=%s;options='--client_encoding=%s'",
                 $this->config['host'],
-                $this->config['database']
+                $this->config['database'],
+                $charset
             );
 
             // Add port if specified

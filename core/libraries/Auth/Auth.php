@@ -9,13 +9,21 @@ use App\Models\User;
 class Auth
 {
     public const COOKIE = 'auth_token';
-    public const DEFAULT_TTL = 3600;
+    public const DEFAULT_TTL = 604800; // 7 days
 
     /**
      * Issue a JWT for the provided payload and queue it as an HTTP-only cookie.
      */
     public static function login(array $payload, int $ttl = self::DEFAULT_TTL): void
     {
+        $configuredTtl = (int) (config('auth.token_ttl') ?? self::DEFAULT_TTL);
+
+        if ($ttl === self::DEFAULT_TTL) {
+            $ttl = $configuredTtl;
+        }
+
+        $ttl = max(60, $ttl);
+
         $token = Jwt::encode($payload, $ttl);
         self::queueCookie($token, $ttl);
         $_COOKIE[self::COOKIE] = $token;

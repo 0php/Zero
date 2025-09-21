@@ -28,7 +28,7 @@ All generated mail is dispatched through the `Mail` facade (`Zero\Lib\Mail\Maile
 
 `App\Controllers\Auth\AuthController` preserves the original login/logout behaviour but now refuses access until `email_verified_at` is populated. When an unverified user attempts to sign in, the controller re-issues a verification email and flashes a helpful message.
 
-Successful logins issue a signed JWT (via `Zero\Lib\Auth\Auth::login()`), stored in an HTTP-only cookie. The `Auth` facade exposes helpers such as `Auth::user()` and `Auth::id()` for downstream controllers, views, or middleware.
+Successful logins issue a signed JWT (via `Zero\Lib\Auth\Auth::login()`), stored in an HTTP-only cookie. Tokens honour `AUTH_TOKEN_TTL` (configured in `config/auth.php`, default 604800 seconds or 7 days), so tweak that value if you want different session lengths. The `Auth` facade exposes helpers such as `Auth::user()` and `Auth::id()` for downstream controllers, views, or middleware.
 
 ## Password Resets
 
@@ -40,7 +40,7 @@ Successful logins issue a signed JWT (via `Zero\Lib\Auth\Auth::login()`), stored
 
 ## Session Driver
 
-Authentication state is now stored in the database by default. The framework registers a PDO-backed session handler that persists session payloads to the `sessions` table. Configure the behaviour via `config/session.php` (or environment variables such as `SESSION_DRIVER`, `SESSION_LIFETIME`, and `SESSION_COOKIE`).
+Authentication state is now stored in the database by default. The framework registers a PDO-backed session handler that persists session payloads to the `sessions` table. You can opt into a cookie-backed driver instead (`SESSION_DRIVER=cookie`), which encrypts the session payload and stores it alongside the framework cookie settings. Configure the behaviour via `config/session.php` (and environment variables such as `SESSION_DRIVER`, `SESSION_LIFETIME`, and `SESSION_COOKIE`). Keep in mind that cookies have a ~4 KB size limit, so database sessions remain the safer choice for larger payloads.
 
 
 ## Database Schema

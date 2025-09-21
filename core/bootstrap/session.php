@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Zero\Lib\Database;
+use Zero\Lib\Session\Handlers\CookieSessionHandler;
 use Zero\Lib\Session\Handlers\DatabaseSessionHandler;
 
 $sessionConfig = config('session');
@@ -15,6 +16,7 @@ $cookieDomain = $sessionConfig['domain'] ?? null;
 $cookieSecure = (bool) ($sessionConfig['secure'] ?? false);
 $cookieHttpOnly = (bool) ($sessionConfig['http_only'] ?? true);
 $cookieSameSite = strtolower((string) ($sessionConfig['same_site'] ?? 'lax'));
+$sameSiteOption = null;
 
 ini_set('session.gc_maxlifetime', (string) $lifetimeSeconds);
 ini_set('session.cookie_lifetime', (string) $lifetimeSeconds);
@@ -30,12 +32,15 @@ $cookieParams = [
 ];
 
 if (in_array($cookieSameSite, ['lax', 'strict', 'none'], true)) {
-    $cookieParams['samesite'] = ucfirst($cookieSameSite);
+    $sameSiteOption = ucfirst($cookieSameSite);
+    $cookieParams['samesite'] = $sameSiteOption;
 }
 
 session_set_cookie_params($cookieParams);
 
-if (($sessionConfig['driver'] ?? 'database') === 'database') {
+$driver = $sessionConfig['driver'] ?? 'database';
+
+if ($driver === 'database') {
     try {
         Database::query('SELECT 1');
 
@@ -44,6 +49,18 @@ if (($sessionConfig['driver'] ?? 'database') === 'database') {
     } catch (\Throwable $e) {
         error_log('Database session handler unavailable: ' . $e->getMessage());
     }
+} elseif ($driver === 'cookie') {
+    $handler = new CookieSessionHandler(
+        $cookieName,
+        $lifetimeSeconds,
+        $cookiePath,
+        $cookieDomain,
+        $cookieSecure,
+        $cookieHttpOnly,
+        $sameSiteOption
+    );
+
+    session_set_save_handler($handler, true);
 }
 
 if (session_status() === PHP_SESSION_NONE) {

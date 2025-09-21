@@ -32,6 +32,23 @@ $users = User::query()
     ->get(); // returns an array of User models
 
 $user = User::find(5); // returns null if not found
+
+// Eager load relationships (including nested relations)
+$users = User::with(['posts' => function ($query) {
+        $query->where('published', true);
+    }, 'posts.comments'])
+    ->orderBy('name')
+    ->get();
+
+// Append relation counts alongside models
+$authors = User::withCount('posts')->get();
+foreach ($authors as $author) {
+    echo $author->name . ' has ' . $author->posts_count . ' posts';
+}
+
+// You can chain both helpers together
+$users = User::with('roles')->withCount(['roles' => 'roles_total'])->get();
+echo $users[0]->roles_total; // hydrated count alias
 ```
 
 Use `toBase()` to access the underlying DBML builder when you need low-level control (e.g., custom aggregates).

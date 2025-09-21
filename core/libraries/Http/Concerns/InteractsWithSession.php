@@ -6,7 +6,7 @@ namespace Zero\Lib\Http\Concerns;
 
 trait InteractsWithSession
 {
-    public function session(string $key = null, mixed $default = null): mixed
+    public function session(?string $key = null, mixed $default = null): mixed
     {
         if (!isset($GLOBALS['_SESSION'])) {
             return $key === null ? [] : $default;

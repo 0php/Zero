@@ -13,7 +13,7 @@ trait InteractsWithHeaders
         $this->headers = $this->detectHeaders($server);
     }
 
-    public function header(string $key = null, mixed $default = null): mixed
+    public function header(?string $key = null, mixed $default = null): mixed
     {
         if ($key === null) {
             return $this->headers;

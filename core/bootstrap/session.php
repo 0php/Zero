@@ -16,6 +16,9 @@ $cookieSecure = (bool) ($sessionConfig['secure'] ?? false);
 $cookieHttpOnly = (bool) ($sessionConfig['http_only'] ?? true);
 $cookieSameSite = strtolower((string) ($sessionConfig['same_site'] ?? 'lax'));
 
+ini_set('session.gc_maxlifetime', (string) $lifetimeSeconds);
+ini_set('session.cookie_lifetime', (string) $lifetimeSeconds);
+
 session_name($cookieName);
 
 $cookieParams = [
@@ -45,4 +48,23 @@ if (($sessionConfig['driver'] ?? 'database') === 'database') {
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
+}
+
+if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
+    $cookieOptions = [
+        'expires' => time() + $lifetimeSeconds,
+        'path' => $cookiePath,
+        'secure' => $cookieSecure,
+        'httponly' => $cookieHttpOnly,
+    ];
+
+    if ($cookieDomain !== null) {
+        $cookieOptions['domain'] = $cookieDomain;
+    }
+
+    if (isset($cookieParams['samesite'])) {
+        $cookieOptions['samesite'] = $cookieParams['samesite'];
+    }
+
+    setcookie($cookieName, session_id(), $cookieOptions);
 }

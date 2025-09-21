@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'driver' => env('SESSION_DRIVER', 'database'),
+    'driver' => env('SESSION_DRIVER', 'database'), // database, cookie
     'table' => env('SESSION_TABLE', 'sessions'),
     'lifetime' => (int) env('SESSION_LIFETIME', 120), // minutes
     'cookie' => env('SESSION_COOKIE', 'zero_session'),

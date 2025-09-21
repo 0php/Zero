@@ -13,6 +13,7 @@ use Zero\Lib\Validation\Rules\Email;
 use Zero\Lib\Validation\Rules\Exists;
 use Zero\Lib\Validation\Rules\Max;
 use Zero\Lib\Validation\Rules\Min;
+use Zero\Lib\Validation\Rules\Number;
 use Zero\Lib\Validation\Rules\Password;
 use Zero\Lib\Validation\Rules\Required;
 use Zero\Lib\Validation\Rules\StringRule;
@@ -286,6 +287,7 @@ final class Validator
             'confirmed' => new Confirmed(),
             'boolean' => new BooleanRule(),
             'array' => new ArrayRule(),
+            'number' => new Number(),
             'unique' => $this->buildUniqueRule($parameters),
             'exists' => $this->buildExistsRule($parameters),
             'password' => $this->buildPasswordRule($parameters),

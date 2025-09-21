@@ -62,9 +62,13 @@ class AuthMiddleware
         if (!Session::has('user')) {
             return Response::redirect('/login');
         }
+
+        Request::set('current_user', Session::get('user'));
     }
 }
 ```
+
+Middleware can use request attributes to share expensive work with controllers or subsequent middleware. See [Request Attributes](request-response.md#request-attributes) for the full API.
 
 You can also pass parameters to middleware when registering routes:
 

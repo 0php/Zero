@@ -18,7 +18,7 @@ chmod +x zero
 php zero serve [--host=127.0.0.1] [--port=8000] [--root=public] [--watch] [--franken] [--swolee]
 ```
 
-- `--host`, `--port`, and `--root` mirror PHP's built-in server options.
+- `--host`, `--port`, and `--root` mirror PHP's built-in server options (defaults fall back to the `HOST`, `PORT`, and `DOCROOT` environment variables when present).
 - `--watch` enables a basic file watcher that restarts the server on changes.
 - `--franken` and `--swolee` expose experimental server backends.
 
@@ -29,6 +29,14 @@ php zero make:controller PostsController
 ```
 
 Creates `app/controllers/PostsController.php` with a simple `index` action. Append `--force` to overwrite an existing file. The generator will add the `Controller` suffix automatically if it is not present.
+
+### Generate a Helper
+
+```bash
+php zero make:helper randomText
+```
+
+Creates `app/helpers/RandomText.php` with a helper skeleton that exposes a default signature derived from the class name. Register the helper in `app/helpers/Helper.php` so it becomes available globally (for example, `random_text(10)`). Use `--force` to overwrite an existing helper.
 
 ### Generate a Model
 

@@ -38,9 +38,9 @@ final class ServeCommand implements CommandInterface
         ]);
         $options = $options === false ? [] : $options;
 
-        $host = $options['host'] ?? Application::DEFAULT_HOST;
-        $port = $options['port'] ?? Application::DEFAULT_PORT;
-        $root = $options['root'] ?? Application::DEFAULT_DOCROOT;
+        $host = $options['host'] ?? env('HOST', Application::DEFAULT_HOST);
+        $port = $options['port'] ?? env('PORT', Application::DEFAULT_PORT);
+        $root = $options['root'] ?? env('DOCROOT', Application::DEFAULT_DOCROOT);
         $watch = array_key_exists('watch', $options ?? []);
 
         if (! is_dir($root)) {
@@ -78,12 +78,8 @@ final class ServeCommand implements CommandInterface
             $this->startWatch($root, $host, $port);
         }
 
-        $command = sprintf(
-            'php -S %s:%s -t %s',
-            escapeshellarg($host),
-            escapeshellarg($port),
-            escapeshellarg($root)
-        );
+        $address = escapeshellarg($host . ':' . $port);
+        $command = sprintf('php -S %s -t %s', $address, escapeshellarg($root));
 
         passthru($command);
     }
@@ -125,12 +121,8 @@ final class ServeCommand implements CommandInterface
     private function startWatch(string $directory, string $host, string $port): void
     {
         fwrite(STDOUT, "Watching for file changes in {$directory}...\n");
-        $command = sprintf(
-            'php -S %s:%s -t %s',
-            escapeshellarg($host),
-            escapeshellarg($port),
-            escapeshellarg($directory)
-        );
+        $address = escapeshellarg($host . ':' . $port);
+        $command = sprintf('php -S %s -t %s', $address, escapeshellarg($directory));
 
         if (function_exists('inotify_init')) {
             $inotify = inotify_init();

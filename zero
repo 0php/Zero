@@ -26,6 +26,8 @@ foreach ($helpers as $helper) {
 
 require_once __DIR__ . '/core/bootstrap/autoload.php';
 
+bootApplicationHelpers();
+
 if (function_exists('loadEnvFiles')) {
     loadEnvFiles();
 }

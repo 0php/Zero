@@ -18,6 +18,8 @@ use Zero\Lib\Router;
  */
 loadEnvFiles();
 
+bootApplicationHelpers();
+
 /**
  * Include the application routes.
  * This file typically defines all the routes for the web application.

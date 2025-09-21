@@ -211,6 +211,47 @@ class QueryBuilder
         return $this->whereNotIn($column, $values, 'OR');
     }
 
+    public function whereInSet(string $column, array $values, string $boolean = 'AND'): self
+    {
+        return $this->addWhereInSet($column, $values, $boolean, false);
+    }
+
+    public function whereNotInSet(string $column, array $values, string $boolean = 'AND'): self
+    {
+        return $this->addWhereInSet($column, $values, $boolean, true);
+    }
+
+    public function orWhereInSet(string $column, array $values): self
+    {
+        return $this->whereInSet($column, $values, 'OR');
+    }
+
+    public function orWhereNotInSet(string $column, array $values): self
+    {
+        return $this->whereNotInSet($column, $values, 'OR');
+    }
+
+    protected function addWhereInSet(string $column, array $values, string $boolean, bool $not): self
+    {
+        if (empty($values)) {
+            return $not ? $this : $this->whereRaw('1 = 0', [], $boolean);
+        }
+
+        $values = array_values($values);
+
+        $this->wheres[] = [
+            'type' => 'in_set',
+            'column' => $column,
+            'values' => $values,
+            'boolean' => strtoupper($boolean),
+            'not' => $not,
+        ];
+
+        $this->addBinding($values);
+
+        return $this;
+    }
+
     public function whereBetween(string $column, array $values, string $boolean = 'AND', bool $not = false): self
     {
         if (count($values) !== 2) {
@@ -868,6 +909,18 @@ class QueryBuilder
                         $where['not'] ? 'NOT ' : '',
                         $placeholders
                     );
+                    break;
+                case 'in_set':
+                    $wrappedColumn = $this->wrap($where['column']);
+                    $operator = $where['not'] ? '= 0' : '> 0';
+                    $glue = $where['not'] ? ' AND ' : ' OR ';
+                    $comparisons = [];
+
+                    foreach ($where['values'] as $_) {
+                        $comparisons[] = sprintf('FIND_IN_SET(?, %s) %s', $wrappedColumn, $operator);
+                    }
+
+                    $parts[] = sprintf('%s(%s)', $boolean, implode($glue, $comparisons));
                     break;
                 case 'between':
                     $parts[] = sprintf(

@@ -537,6 +537,7 @@ class Model implements JsonSerializable
         $query = $instance->newQuery();
 
         if ($foreignValue !== null) {
+            
             $query = $query->where($ownerKey, $foreignValue)->limit(1);
         } else {
             $query = $query->whereRaw('1 = 0')->limit(1);
@@ -566,6 +567,7 @@ class Model implements JsonSerializable
         $relatedPivotKey ??= $instance->guessBelongsToManyForeignKey();
         $parentKey ??= $this->getPrimaryKey();
         $relatedKey ??= $instance->getPrimaryKey();
+        
 
         $parentValue = $this->getAttribute($parentKey);
 
@@ -912,14 +914,24 @@ class Model implements JsonSerializable
      */
     protected function guessRelationName(): ?string
     {
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3);
-        $method = $trace[1]['function'] ?? null;
+        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
 
-        if ($method === '__get' && isset($trace[2]['function'])) {
-            $method = $trace[2]['function'];
+        foreach ($trace as $frame) {
+            $method = $frame['function'] ?? null;
+            $class = $frame['class'] ?? null;
+
+            if (!is_string($method) || $method === '__get') {
+                continue;
+            }
+
+            if ($class === self::class) {
+                continue;
+            }
+
+            return $method;
         }
 
-        return is_string($method) ? $method : null;
+        return null;
     }
 
     /**
@@ -1798,6 +1810,7 @@ class BelongsTo extends Relation
         protected mixed $foreignValue,
         protected ?string $relationName = null
     ) {
+
         parent::__construct($query, $parent);
     }
 

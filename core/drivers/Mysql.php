@@ -51,11 +51,14 @@ class MysqlDriver {
     public function createConnection() {
         try {
             // Create new PDO instance with connection parameters
+            $charset = $this->config['charset'] ?? 'utf8mb4';
+            $collation = $this->config['collation'] ?? null;
+
             $this->connection = new PDO(
-                'mysql:host=' . $this->config['host'] . 
-                ';dbname=' . $this->config['database'] . 
-                ';charset=utf8', 
-                $this->config['username'], 
+                'mysql:host=' . $this->config['host'] .
+                ';dbname=' . $this->config['database'] .
+                ';charset=' . $charset,
+                $this->config['username'],
                 $this->config['password']
             );
 
@@ -64,6 +67,12 @@ class MysqlDriver {
             $this->connection->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
             $this->connection->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
             $this->connection->setAttribute(PDO::ATTR_PERSISTENT, true);
+
+            if ($collation !== null) {
+                $escapedCharset = str_replace("'", "''", $charset);
+                $escapedCollation = str_replace("'", "''", $collation);
+                $this->connection->exec(sprintf("SET NAMES '%s' COLLATE '%s'", $escapedCharset, $escapedCollation));
+            }
 
         } catch (PDOException $e) {
             throw new PDOException("Failed to connect to MySQL: " . $e->getMessage(), $e->getCode());

@@ -156,6 +156,7 @@ zero                # CLI entry point for serving and scaffolding
 
 - [`Zero\Lib\Http\Http`](docs/support.md#http-client) provides a fluent HTTP client for outbound requests (JSON helpers, timeouts, retries, file uploads).
 - [`Zero\Lib\Support\Str`](docs/support.md#string-helpers) bundles familiar string transformations (studly, camel, snake, slug, etc.) for CLI and application code.
+- [`Zero\Lib\Storage\Storage`](docs/support.md#storage) persists files to the configured disks; pair with uploaded files via `$file->store()`.
 
 ## CLI Reference
 
@@ -172,13 +173,16 @@ zero                # CLI entry point for serving and scaffolding
 | `php zero migrate:fresh`                                                     | Drop all tables and execute migrations from scratch.                              |
 | `php zero make:seeder Name [--force]`                                        | Generate a seeder class in `database/seeders`.                                    |
 | `php zero db:seed [FQN]`                                                     | Run a seeder (defaults to `Database\\Seeders\\DatabaseSeeder`).                   |
+| `php zero storage:link`                                                      | Create symbolic links for configured storage disks.                               |
 
 ## Configuration
 
 - Environment variables are loaded in priority order: `.env` → `.env.staging` → `.env.production`, with `${VAR}` interpolation and array syntax `[a,b,c]` support.
 - Database connections live in `config/database.php` with drivers for MySQL, PostgreSQL, and SQLite. Switch drivers via `DB_CONNECTION` or driver-specific env vars (`MYSQL_HOST`, `SQLITE_DATABASE`, etc.).
-- Sessions default to the database driver via `config/session.php`; adjust lifetime, cookie name, or fall back to file storage with `SESSION_DRIVER=file`.
+- Sessions default to the database driver via `config/session.php`; adjust lifetime, cookie name, or switch to encrypted cookie storage with `SESSION_DRIVER=cookie`.
+- Authentication tokens default to a one-week TTL; set `AUTH_TOKEN_TTL` (seconds) in `.env` or `config/auth.php` if you need different longevity.
 - Logging is defined in `config/logging.php`. Switch between file and database channels with `LOG_DRIVER`, and point the database channel at a custom table via `LOG_TABLE`.
+- File storage defaults to the `local` disk; adjust `config/storage.php` or `.env` (`STORAGE_DISK`, `STORAGE_LOCAL_ROOT`) and persist uploads with `Storage::put()` / `$file->store()`.
 - Updater settings live in `config/update.php`. Set `UPDATE_MANIFEST_URL` (and optional `UPDATE_TIMEOUT`) to enable the `update:latest` command.
   - Leave `UPDATE_MANIFEST_URL` blank to pull the latest GitHub release (or branch) using `UPDATE_GITHUB_REPO` and `UPDATE_GITHUB_BRANCH`.
 - Update `config/view.php`, `config/storage.php`, and other config files to match your deployment needs.

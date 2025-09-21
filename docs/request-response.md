@@ -8,11 +8,18 @@ Zero Framework models each HTTP cycle with dedicated request and response abstra
 - The raw body (`php://input`) is buffered, enabling JSON decoding through `Request::json()`.
 - Common helpers:
   - `Request::input('user.email')` – dot-notation lookup into merged query, form, and JSON payloads.
-  - `Request::query()` / `Request::post()` – direct access to GET/POST data.
+- `Request::query()` / `Request::post()` – direct access to GET/POST data.
+- `Request::file('avatar')` – returns an `UploadedFile` wrapper for the uploaded payload.
   - `Request::header('accept')` – case-insensitive header retrieval.
   - `Request::expectsJson()` / `Request::wantsJson()` – drives content negotiation.
   - `Request::ip()` – best-effort client IP detection.
 - The singleton instance is accessible via `Request::instance()` and injected automatically when a controller or middleware type-hints `Zero\Lib\Http\Request`.
+
+### Uploaded Files
+
+- Retrieve uploads via `Request::file('avatar')`; the method returns an `UploadedFile` instance with helpers like `getClientOriginalName()` and `store()`.
+- Multiple uploads (e.g., `photos[]`) return an array of `UploadedFile` objects that can each be stored individually.
+- Call `$file->store('avatars')` to persist the file using the storage layer, or `$file->storeAs('avatars', 'custom-name.jpg')` for custom filenames.
 
 ### Request Attributes
 

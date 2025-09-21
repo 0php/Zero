@@ -1,0 +1,80 @@
+<?php
+// update.php
+// Run this script inside your project folder to update only core/ and zero
+
+echo "🔄 Updating Zero PHP Framework...\n";
+
+// Variables
+$url = "https://github.com/0php/Zero/archive/refs/heads/main.zip";
+$zipFile = "main.zip";
+$defaultDir = "Zero-main";
+
+// Create a temporary folder
+$tmpDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . uniqid("zero_update_", true);
+mkdir($tmpDir);
+
+// Download the latest source
+$zipPath = $tmpDir . DIRECTORY_SEPARATOR . $zipFile;
+file_put_contents($zipPath, file_get_contents($url));
+
+// Extract the zip
+$zip = new ZipArchive;
+if ($zip->open($zipPath) === TRUE) {
+    $zip->extractTo($tmpDir);
+    $zip->close();
+} else {
+    die("❌ Failed to extract archive.\n");
+}
+
+// Copy core/ directory
+$srcCore = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "core";
+$dstCore = __DIR__ . DIRECTORY_SEPARATOR . "core";
+
+// Recursively copy with overwrite
+function copyDirectory($src, $dst) {
+    $dir = opendir($src);
+    if (!is_dir($dst)) {
+        mkdir($dst, 0777, true);
+    }
+    while (false !== ($file = readdir($dir))) {
+        if ($file === '.' || $file === '..') continue;
+        $srcPath = $src . DIRECTORY_SEPARATOR . $file;
+        $dstPath = $dst . DIRECTORY_SEPARATOR . $file;
+        if (is_dir($srcPath)) {
+            copyDirectory($srcPath, $dstPath);
+        } else {
+            copy($srcPath, $dstPath);
+        }
+    }
+    closedir($dir);
+}
+
+// Replace core/ contents
+if (is_dir($dstCore)) {
+    // Delete old contents first
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dstCore, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+    foreach ($it as $file) {
+        $file->isDir() ? rmdir($file) : unlink($file);
+    }
+}
+copyDirectory($srcCore, $dstCore);
+
+// Copy zero file
+$srcZero = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "zero";
+$dstZero = __DIR__ . DIRECTORY_SEPARATOR . "zero";
+copy($srcZero, $dstZero);
+
+// Cleanup
+$it = new RecursiveIteratorIterator(
+    new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS),
+    RecursiveIteratorIterator::CHILD_FIRST
+);
+foreach ($it as $file) {
+    $file->isDir() ? rmdir($file) : unlink($file);
+}
+rmdir($tmpDir);
+
+echo "✅ Update Zero PHP Framework completed\n";

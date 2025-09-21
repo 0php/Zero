@@ -7,6 +7,7 @@ namespace Zero\Lib\Console;
 use Zero\Lib\Console\Command\CommandInterface;
 use Zero\Lib\Console\Commands\KeyGenerateCommand;
 use Zero\Lib\Console\Commands\MakeControllerCommand;
+use Zero\Lib\Console\Commands\MakeHelperCommand;
 use Zero\Lib\Console\Commands\MakeMigrationCommand;
 use Zero\Lib\Console\Commands\MakeModelCommand;
 use Zero\Lib\Console\Commands\MakeSeederCommand;
@@ -33,6 +34,7 @@ final class Application
     {
         $this->register(new ServeCommand());
         $this->register(new MakeControllerCommand());
+        $this->register(new MakeHelperCommand());
         $this->register(new MakeModelCommand());
         $this->register(new MakeMigrationCommand());
         $this->register(new MigrateCommand());

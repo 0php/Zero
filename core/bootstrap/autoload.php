@@ -143,6 +143,17 @@ spl_autoload_register(function ($className) use ($aliases) {
         }
     }
 
+    // Handle classes in the App\\Helpers namespace
+    if(strpos($className, 'App\\Helpers') !== false) {
+        $className = str_replace('App\\Helpers\\', '', $className);
+        $class_path = app_path('helpers/' . str_replace('\\', '/', $className) . '.php');
+
+        if (file_exists($class_path)) {
+            require_once $class_path;
+            return;
+        }
+    }
+
     // Handle classes in the Drivers namespace
     if(strpos($className, 'Drivers') !== false) {
         // Remove the namespace prefix and the 'Driver' suffix

@@ -259,7 +259,12 @@ class View
         $content = str_replace('@else', '<?php else: ?>', $content);
 
         $content = preg_replace_callback('/{{{(.*?)}}}/', fn($matches) => "<?php echo {$matches[1]}; ?>", $content);
-        $content = preg_replace_callback('/{{\s*(.+?)\s*}}/', fn($matches) => "<?php echo htmlspecialchars({$matches[1]}, ENT_QUOTES, 'UTF-8'); ?>", $content);
+        $content = preg_replace_callback(
+            '/{{\s*(.+?)\s*}}/',
+            fn($matches) => "<?php echo htmlspecialchars(({$matches[1]}) ?? '', ENT_QUOTES, 'UTF-8'); ?>",
+            $content
+        );
+
 
         $content = preg_replace_callback('/@include\s*\((.*?)\)\s*/', function ($matches) {
             $includePath = eval('return ' . $matches[1] . ';');

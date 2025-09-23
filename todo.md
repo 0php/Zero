@@ -20,6 +20,7 @@
 - [ ] Enhance DBML/Model with eager loading helpers (e.g., `with`, `load`) and relationship batching
 - [x] Implement pagination helpers for DBML and Model (e.g., `paginate`, `simplePaginate`)
 - [ ] Write integration tests covering migrations/model behaviours
+- [ ] Implement subquery relationship (e.g `whereHas`, `has`, `whereDoesntHave`)
 
 ## Library Refactor
 
@@ -36,3 +37,8 @@
 - [x] Implement configurable error pages / JSON responses for common HTTP status codes
 - [x] Add logging hooks (file and optional external integrations) and configuration knobs
 - [ ] Update documentation to describe troubleshooting and error handling workflow
+
+## Mailable
+
+- [ ] Create mailable custom services
+- [ ] Add custom driver like sendgrid etc

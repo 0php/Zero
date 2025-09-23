@@ -6,6 +6,7 @@ namespace Zero\Lib\Support;
 
 final class Str
 {
+    
     public static function studly(string $value): string
     {
         $value = str_replace(['-', '_'], ' ', $value);
@@ -88,5 +89,21 @@ final class Str
         }
 
         return rtrim(mb_substr($value, 0, $limit)) . $end;
+    }
+
+    public static function uuid(): string
+    {
+        $data = random_bytes(16);
+        $data[6] = chr((ord($data[6]) & 0x0f) | 0x40);
+        $data[8] = chr((ord($data[8]) & 0x3f) | 0x80);
+
+        $hex = bin2hex($data);
+        return vsprintf('%s-%s-%s-%s-%s', [
+            substr($hex, 0, 8),
+            substr($hex, 8, 4),
+            substr($hex, 12, 4),
+            substr($hex, 16, 4),
+            substr($hex, 20, 12),
+        ]);
     }
 }

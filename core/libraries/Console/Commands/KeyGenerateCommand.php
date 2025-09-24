@@ -39,19 +39,19 @@ final class KeyGenerateCommand implements CommandInterface
         $envExampleFile = $rootDir . '/.env.example';
         
         if (!file_exists($envFile)) {
-            fwrite(STDERR, "Creating new .env file...\n");
+            \Zero\Lib\Log::channel('internal')->info('Creating new .env file...');
             
             // If .env.example exists, use it as a template
             if (file_exists($envExampleFile)) {
                 if (!copy($envExampleFile, $envFile)) {
-                    fwrite(STDERR, "Failed to create .env from .env.example. Check file permissions.\n");
+                    \Zero\Lib\Log::channel('internal')->error('Failed to create .env from .env.example. Check file permissions.');
                     return 1;
                 }
-                fwrite(STDERR, "Copied .env from .env.example\n");
+                \Zero\Lib\Log::channel('internal')->info('Copied .env from .env.example');
             } else {
                 // Create an empty .env file if .env.example doesn't exist
                 if (file_put_contents($envFile, "") === false) {
-                    fwrite(STDERR, "Failed to create .env file. Check directory permissions.\n");
+                    \Zero\Lib\Log::channel('internal')->error('Failed to create .env file. Check directory permissions.');
                     return 1;
                 }
             }
@@ -71,11 +71,11 @@ final class KeyGenerateCommand implements CommandInterface
         }
 
         if (file_put_contents($envFile, $envContent) === false) {
-            fwrite(STDERR, "Failed to write to $envFile. Check file permissions.\n");
+            \Zero\Lib\Log::channel('internal')->error("Failed to write to $envFile. Check file permissions.");
             return 1;
         }
 
-        echo "Application key set successfully in $envFile\n";
+        \Zero\Lib\Log::channel('internal')->info("Application key set successfully in $envFile");
         return 0;
     }
 

@@ -1,14 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Helpers;
 
-class Helper {
+use Zero\Lib\Support\RegistersHelpers;
+
+class Helper
+{
+    use RegistersHelpers;
+
     /**
-     * Register all helper classes with the global helper registry.
+     * Register all application helper classes.
      */
-    public function boot(): void {
-        registerHelper([
-            // YourHelper::class,
+    public function boot(): void
+    {
+        $this->register([
+            // \App\Helpers\ExampleHelper::class
         ]);
     }
 }

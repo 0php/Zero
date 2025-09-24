@@ -29,7 +29,6 @@ final class SeedCommand implements CommandInterface
         $class = $argv[2] ?? 'Database\\Seeders\\DatabaseSeeder';
 
         SeederRunner::run($class);
-        fwrite(STDOUT, "Seeder executed: {$class}\n");
 
         return 0;
     }

@@ -143,6 +143,39 @@ spl_autoload_register(function ($className) use ($aliases) {
         }
     }
 
+    // Handle classes in the App\Logging namespace
+    if(strpos($className, 'App\Logging') !== false) {
+        $className = str_replace('App\Logging\\', '', $className);
+        $class_path = app_path('logging/' . str_replace('\\', '/', $className) . '.php');
+
+        if (file_exists($class_path)) {
+            require_once $class_path;
+            return;
+        }
+    }
+
+    // Handle classes in the App\Console\Commands namespace
+    if(strpos($className, 'App\Console\Commands') !== false) {
+        $className = str_replace('App\Console\Commands\\', '', $className);
+        $class_path = app_path('console/Commands/' . str_replace('\\', '/', $className) . '.php');
+
+        if (file_exists($class_path)) {
+            require_once $class_path;
+            return;
+        }
+    }
+
+    // Handle classes in the App\Console namespace
+    if(strpos($className, 'App\Console') === 0) {
+        $relative = str_replace('App\Console\\', '', $className);
+        $class_path = app_path('console/' . str_replace('\\', '/', $relative) . '.php');
+
+        if (file_exists($class_path)) {
+            require_once $class_path;
+            return;
+        }
+    }
+
     // Handle classes in the App\\Helpers namespace
     if(strpos($className, 'App\\Helpers') !== false) {
         $className = str_replace('App\\Helpers\\', '', $className);

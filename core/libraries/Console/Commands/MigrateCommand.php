@@ -30,13 +30,13 @@ final class MigrateCommand implements CommandInterface
         $executed = $migrator->run();
 
         if (empty($executed)) {
-            fwrite(STDOUT, "No pending migrations.\n");
+            \Zero\Lib\Log::channel('internal')->info('No pending migrations.');
 
             return 0;
         }
 
         foreach ($executed as $name) {
-            fwrite(STDOUT, "Migrated: {$name}\n");
+            \Zero\Lib\Log::channel('internal')->info("Migrated: {$name}");
         }
 
         return 0;

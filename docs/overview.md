@@ -12,7 +12,7 @@ Zero Framework is a lightweight, native-PHP micro-framework inspired by Laravel'
 - **Views**: `Zero\Lib\View` renders PHP templates with Blade-inspired directives, layout/section support, and optional caching.
 - **Database access (DBML)**: `Zero\Lib\DB\DBML`—the Database Management Layer—provides a fluent query builder atop the framework's PDO bridge.
 - **Models**: `Zero\Lib\Model` offers an active-record style abstraction that hydrates results into rich PHP objects.
-- **Helpers**: `registerHelper()` wires app-specific helper classes into globally callable functions (generate stubs with `php zero make:helper`).
+- **Helpers**: The `RegistersHelpers` trait (backed by `HelperRegistry`) wires app-specific helper classes into globally callable functions (generate stubs with `php zero make:helper`).
 - **Migrations & Seeders (DBAL)**: CLI commands (`migrate`, `make:migration`, `db:seed`) drive the migration DBAL for schema changes and database seeding.
 - **Mailing**: `Zero\Lib\Mail\Mailer` wraps SMTP delivery with fluent message composition and dotenv-driven configuration.
 - **HTTP Client**: [`Zero\Lib\Http\Http`](support.md#http-client) exposes a fluent, cURL-backed client for outbound requests with JSON helpers and timeout configuration.

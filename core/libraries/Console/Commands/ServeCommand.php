@@ -44,7 +44,7 @@ final class ServeCommand implements CommandInterface
         $watch = array_key_exists('watch', $options ?? []);
 
         if (! is_dir($root)) {
-            fwrite(STDERR, "Error: The specified document root \"{$root}\" does not exist.\n");
+            \Zero\Lib\Log::channel('internal')->error("Error: The specified document root \"{$root}\" does not exist.");
             return 1;
         }
 
@@ -56,7 +56,7 @@ final class ServeCommand implements CommandInterface
 
         if (array_key_exists('swolee', $options ?? [])) {
             if (! extension_loaded('swoole')) {
-                fwrite(STDERR, "Error: The Swoole extension is not installed.\n");
+                \Zero\Lib\Log::channel('internal')->error('Error: The Swoole extension is not installed.');
 
                 return 1;
             }
@@ -66,7 +66,7 @@ final class ServeCommand implements CommandInterface
             return 0;
         }
 
-        fwrite(STDOUT, "Starting PHP server in default mode...\n");
+        \Zero\Lib\Log::channel('internal')->info('Starting PHP server in default mode...');
         $this->startPhpServer($host, $port, $root, $watch);
 
         return 0;
@@ -90,9 +90,9 @@ final class ServeCommand implements CommandInterface
             $this->startWatch($root, $host, $port);
         }
 
-        fwrite(STDOUT, "Running Franken server...\n");
-        fwrite(STDOUT, "Host: {$host}, Port: {$port}, Document Root: {$root}\n");
-        fwrite(STDOUT, "Franken mode started...\n");
+        \Zero\Lib\Log::channel('internal')->info('Running Franken server...');
+        \Zero\Lib\Log::channel('internal')->info("Host: {$host}, Port: {$port}, Document Root: {$root}");
+        \Zero\Lib\Log::channel('internal')->info('Franken mode started...');
     }
 
     private function startSwooleServer(string $host, string $port, string $root, bool $watch): void
@@ -114,13 +114,13 @@ final class ServeCommand implements CommandInterface
             }
         });
 
-        fwrite(STDOUT, "Swoole server started at http://{$host}:{$port}...\n");
+        \Zero\Lib\Log::channel('internal')->info("Swoole server started at http://{$host}:{$port}...");
         $server->start();
     }
 
     private function startWatch(string $directory, string $host, string $port): void
     {
-        fwrite(STDOUT, "Watching for file changes in {$directory}...\n");
+        \Zero\Lib\Log::channel('internal')->info("Watching for file changes in {$directory}...");
         $address = escapeshellarg($host . ':' . $port);
         $command = sprintf('php -S %s -t %s', $address, escapeshellarg($directory));
 
@@ -132,7 +132,7 @@ final class ServeCommand implements CommandInterface
             while (true) {
                 $events = inotify_read($inotify);
                 if (! empty($events)) {
-                    fwrite(STDOUT, "File change detected, restarting server...\n");
+                    \Zero\Lib\Log::channel('internal')->info('File change detected, restarting server...');
                     exec($command);
                 }
                 usleep(500000);
@@ -145,7 +145,7 @@ final class ServeCommand implements CommandInterface
             $current = $this->getLastModifiedTime($directory);
             if ($current > $lastModified) {
                 $lastModified = $current;
-                fwrite(STDOUT, "File change detected, restarting server...\n");
+                \Zero\Lib\Log::channel('internal')->info('File change detected, restarting server...');
                 exec($command);
             }
             usleep(500000);

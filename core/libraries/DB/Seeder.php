@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zero\Lib\DB;
 
+use Zero\Lib\Log;
 use InvalidArgumentException;
 
 abstract class Seeder
@@ -24,6 +25,7 @@ abstract class Seeder
 
         foreach ($list as $seeder) {
             $instance = $this->resolveSeeder($seeder);
+            Log::channel('stderr')->info("Running seeder: ".$seeder);
             $instance->run();
         }
     }

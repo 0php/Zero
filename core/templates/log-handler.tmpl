@@ -1,0 +1,23 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use DateTimeImmutable;
+use Zero\Lib\Log\LogHandlerInterface;
+
+final class {{ class }} implements LogHandlerInterface
+{
+    public function handle(
+        DateTimeImmutable $timestamp,
+        string $level,
+        mixed $message,
+        array $context,
+        array $record,
+        array $channel
+    ): void {
+        // TODO: send the log record wherever you need.
+        // Example: error_log($record['plain']);
+    }
+}

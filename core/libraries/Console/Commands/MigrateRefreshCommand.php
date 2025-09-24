@@ -30,24 +30,23 @@ final class MigrateRefreshCommand implements CommandInterface
         $rolled = $migrator->reset();
 
         if (empty($rolled)) {
-            fwrite(STDOUT, "Nothing to rollback.\n");
+            \Zero\Lib\Log::channel('internal')->info('Nothing to rollback.');
         } else {
             foreach ($rolled as $name) {
-                fwrite(STDOUT, "Rolled back: {$name}\n");
+                \Zero\Lib\Log::channel('internal')->info("Rolled back: {$name}");
             }
         }
 
         $executed = $migrator->run();
 
         if (empty($executed)) {
-            fwrite(STDOUT, "No migrations were run.\n");
+            \Zero\Lib\Log::channel('internal')->info('No migrations were run.');
         } else {
             foreach ($executed as $name) {
-                fwrite(STDOUT, "Migrated: {$name}\n");
+                \Zero\Lib\Log::channel('internal')->info("Migrated: {$name}");
             }
         }
 
         return 0;
     }
 }
-

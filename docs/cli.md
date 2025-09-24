@@ -46,6 +46,14 @@ php zero make:helper randomText
 
 Creates `app/helpers/RandomText.php` with a helper skeleton that exposes a default signature derived from the class name. Register the helper in `app/helpers/Helper.php` so it becomes available globally (for example, `random_text(10)`). Use `--force` to overwrite an existing helper.
 
+### Generate a Console Command
+
+```bash
+php zero make:command HealthCheck --signature=app:health
+```
+
+Creates `app/console/Commands/HealthCheck.php` implementing the `CommandInterface`. The generator also ensures `app/console/Commands/Command.php` exists and appends the new command to its registration list so it is immediately available to the CLI. Provide `--description="..."` to customise the help text and `--force` to overwrite an existing command class.
+
 ### Generate a Model
 
 ```bash

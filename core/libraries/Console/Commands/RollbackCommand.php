@@ -31,13 +31,13 @@ final class RollbackCommand implements CommandInterface
         $rolled = $migrator->rollback($steps);
 
         if (empty($rolled)) {
-            fwrite(STDOUT, "Nothing to rollback.\n");
+            \Zero\Lib\Log::channel('internal')->info('Nothing to rollback.');
 
             return 0;
         }
 
         foreach ($rolled as $name) {
-            fwrite(STDOUT, "Rolled back: {$name}\n");
+            \Zero\Lib\Log::channel('internal')->info("Rolled back: {$name}");
         }
 
         return 0;

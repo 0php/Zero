@@ -30,10 +30,10 @@ final class MigrateFreshCommand implements CommandInterface
         $dropped = DatabaseCleaner::dropAllTables();
 
         if (empty($dropped)) {
-            fwrite(STDOUT, "No tables detected to drop.\n");
+            \Zero\Lib\Log::channel('internal')->info('No tables detected to drop.');
         } else {
             foreach ($dropped as $table) {
-                fwrite(STDOUT, "Dropped table: {$table}\n");
+                \Zero\Lib\Log::channel('internal')->info("Dropped table: {$table}");
             }
         }
 
@@ -42,14 +42,13 @@ final class MigrateFreshCommand implements CommandInterface
         $executed = $migrator->run();
 
         if (empty($executed)) {
-            fwrite(STDOUT, "No migrations were run.\n");
+            \Zero\Lib\Log::channel('internal')->info('No migrations were run.');
         } else {
             foreach ($executed as $name) {
-                fwrite(STDOUT, "Migrated: {$name}\n");
+                \Zero\Lib\Log::channel('internal')->info("Migrated: {$name}");
             }
         }
 
         return 0;
     }
 }
-

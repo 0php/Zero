@@ -1,0 +1,37 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use Zero\Lib\Console\Command\CommandInterface;
+use Zero\Lib\Console\Input;
+
+final class {{ class }} implements CommandInterface
+{
+    public function getName(): string
+    {
+        return '{{ signature }}';
+    }
+
+    public function getDescription(): string
+    {
+        return '{{ description }}';
+    }
+
+    public function getUsage(): string
+    {
+        return 'php zero {{ signature }}';
+    }
+
+    public function execute(array $argv, ?Input $input = null): int
+    {
+        $input ??= new Input([], []);
+        $arguments = $input->arguments();
+        $options = $input->options();
+
+        // Command logic goes here. Use $arguments and $options as needed.
+
+        return 0;
+    }
+}

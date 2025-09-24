@@ -32,7 +32,7 @@ final class MakeServiceCommand implements CommandInterface
         $force = in_array('--force', $argv, true);
 
         if ($name === null) {
-            fwrite(STDERR, "Usage: {$this->getUsage()}\n");
+            \Zero\Lib\Log::channel('internal')->error("Usage: {$this->getUsage()}");
 
             return 1;
         }
@@ -42,7 +42,7 @@ final class MakeServiceCommand implements CommandInterface
         $name = trim($name, '/');
 
         if ($name === '') {
-            fwrite(STDERR, "Usage: {$this->getUsage()}\n");
+            \Zero\Lib\Log::channel('internal')->error("Usage: {$this->getUsage()}");
 
             return 1;
         }
@@ -55,7 +55,7 @@ final class MakeServiceCommand implements CommandInterface
         $path = app_path('services/' . $directory . $className . '.php');
 
         if (file_exists($path) && ! $force) {
-            fwrite(STDERR, "Service {$className} already exists. Use --force to overwrite.\n");
+            \Zero\Lib\Log::channel('internal')->error("Service {$className} already exists. Use --force to overwrite.");
 
             return 1;
         }
@@ -73,7 +73,7 @@ final class MakeServiceCommand implements CommandInterface
         ]);
 
         file_put_contents($path, $contents);
-        fwrite(STDOUT, "Service created: {$path}\n");
+        \Zero\Lib\Log::channel('internal')->info("Service created: {$path}");
 
         return 0;
     }

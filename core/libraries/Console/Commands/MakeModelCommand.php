@@ -34,7 +34,7 @@ final class MakeModelCommand implements CommandInterface
         $withMigration = $parsed['migration'];
 
         if ($name === null) {
-            fwrite(STDERR, "Usage: {$this->getUsage()}\n");
+            \Zero\Lib\Log::channel('internal')->error("Usage: {$this->getUsage()}");
 
             return 1;
         }
@@ -43,7 +43,7 @@ final class MakeModelCommand implements CommandInterface
         $path = app_path('models/' . $className . '.php');
 
         if (file_exists($path) && ! $force) {
-            fwrite(STDERR, "Model {$className} already exists. Use --force to overwrite.\n");
+            \Zero\Lib\Log::channel('internal')->error("Model {$className} already exists. Use --force to overwrite.");
 
             return 1;
         }
@@ -55,13 +55,13 @@ final class MakeModelCommand implements CommandInterface
         ]);
 
         file_put_contents($path, $contents);
-        fwrite(STDOUT, "Model created: {$path}\n");
+        \Zero\Lib\Log::channel('internal')->info("Model created: {$path}");
 
         if ($withMigration) {
             $status = $this->createMigration($className, $force);
 
             if ($status !== 0) {
-                fwrite(STDERR, "Failed to create migration for model {$className}.\n");
+                \Zero\Lib\Log::channel('internal')->error("Failed to create migration for model {$className}.");
 
                 return $status;
             }

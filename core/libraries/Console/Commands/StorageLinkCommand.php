@@ -30,7 +30,7 @@ final class StorageLinkCommand implements CommandInterface
         $links = $this->configuredLinks();
 
         if (empty($links)) {
-            fwrite(STDOUT, "No storage links defined.\n");
+            \Zero\Lib\Log::channel('internal')->info('No storage links defined.');
 
             return 0;
         }
@@ -40,10 +40,10 @@ final class StorageLinkCommand implements CommandInterface
         foreach ($links as $link => $targetDisk) {
             try {
                 $this->createLink($link, $targetDisk);
-                fwrite(STDOUT, sprintf("Linked [%s] -> [%s]\n", $link, $targetDisk));
+                \Zero\Lib\Log::channel('internal')->info(sprintf('Linked [%s] -> [%s]', $link, $targetDisk));
             } catch (\Throwable $e) {
                 $status = 1;
-                fwrite(STDERR, sprintf("Failed to link [%s]: %s\n", $link, $e->getMessage()));
+                \Zero\Lib\Log::channel('internal')->error(sprintf('Failed to link [%s]: %s', $link, $e->getMessage()));
             }
         }
 

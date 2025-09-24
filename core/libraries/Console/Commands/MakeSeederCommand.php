@@ -32,7 +32,7 @@ final class MakeSeederCommand implements CommandInterface
         $force = in_array('--force', $argv, true);
 
         if ($name === null) {
-            fwrite(STDERR, "Usage: {$this->getUsage()}\n");
+            \Zero\Lib\Log::channel('internal')->error("Usage: {$this->getUsage()}");
 
             return 1;
         }
@@ -41,7 +41,7 @@ final class MakeSeederCommand implements CommandInterface
         $path = base('database/seeders/' . $className . '.php');
 
         if (file_exists($path) && ! $force) {
-            fwrite(STDERR, "Seeder {$className} already exists. Use --force to overwrite.\n");
+            \Zero\Lib\Log::channel('internal')->error("Seeder {$className} already exists. Use --force to overwrite.");
 
             return 1;
         }
@@ -53,7 +53,7 @@ final class MakeSeederCommand implements CommandInterface
         ]);
 
         file_put_contents($path, $contents);
-        fwrite(STDOUT, "Seeder created: {$path}\n");
+        \Zero\Lib\Log::channel('internal')->info("Seeder created: {$path}");
 
         return 0;
     }

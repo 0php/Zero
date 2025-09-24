@@ -32,7 +32,7 @@ final class MakeMigrationCommand implements CommandInterface
         $force = in_array('--force', $argv, true);
 
         if ($name === null) {
-            fwrite(STDERR, "Usage: {$this->getUsage()}\n");
+            \Zero\Lib\Log::channel('internal')->error("Usage: {$this->getUsage()}");
 
             return 1;
         }
@@ -42,7 +42,7 @@ final class MakeMigrationCommand implements CommandInterface
         $path = base('database/migrations/' . $fileName);
 
         if (file_exists($path) && ! $force) {
-            fwrite(STDERR, "Migration {$fileName} already exists. Use --force to overwrite.\n");
+            \Zero\Lib\Log::channel('internal')->error("Migration {$fileName} already exists. Use --force to overwrite.");
 
             return 1;
         }
@@ -54,7 +54,7 @@ final class MakeMigrationCommand implements CommandInterface
         ]);
 
         file_put_contents($path, $contents);
-        fwrite(STDOUT, "Migration created: {$path}\n");
+        \Zero\Lib\Log::channel('internal')->info("Migration created: {$path}");
 
         return 0;
     }

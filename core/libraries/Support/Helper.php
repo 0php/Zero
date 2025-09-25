@@ -178,6 +178,7 @@ trait RegistersHelpers
 namespace {
 
 use Zero\Lib\Http\Response;
+use Zero\Lib\Router;
 use Zero\Lib\View;
 
 if (!function_exists('response')) {
@@ -223,6 +224,16 @@ if (!function_exists('view')) {
         $content = View::render($template, $data);
 
         return Response::html($content, $status, $headers);
+    }
+}
+
+if (!function_exists('route')) {
+    /**
+     * Generate a URL for the given named route.
+     */
+    function route(string $name, array $parameters = [], bool $absolute = true): string
+    {
+        return Router::route($name, $parameters, $absolute);
     }
 }
 

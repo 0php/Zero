@@ -11,7 +11,7 @@
                 <?php $authUser = Auth::user(); ?>
 
                 <?php if ($authUser): ?>
-                    <form method="POST" action="/logout" class="d-flex align-items-center gap-3">
+                    <form method="POST" action="<?= route('auth.logout'); ?>" class="d-flex align-items-center gap-3">
                         <span class="text-muted">
                             Hello, {{ $authUser->name }}
                         </span>
@@ -20,7 +20,7 @@
                 <?php else: ?>
                     <div class="text-end">
                         <p class="mb-1 text-muted">Welcome! Please log in to continue.</p>
-                        <a href="/login" class="btn btn-primary btn-sm">Go to Login</a>
+                        <a href="<?= route('auth.login.show'); ?>" class="btn btn-primary btn-sm">Go to Login</a>
                     </div>
                 <?php endif; ?>
             </div>

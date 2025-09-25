@@ -15,7 +15,7 @@ View::startSection('content');
         </div>
     <?php endif; ?>
 
-    <form method="POST" action="/register" class="card shadow-sm p-4">
+    <form method="POST" action="<?= route('auth.register.store'); ?>" class="card shadow-sm p-4">
         <div class="mb-3">
             <label for="name" class="form-label">Name</label>
             <input
@@ -84,7 +84,7 @@ View::startSection('content');
 
         <div class="d-grid gap-2">
             <button type="submit" class="btn btn-primary">Register</button>
-            <a href="/login" class="btn btn-link">Already registered? Sign in</a>
+            <a href="<?= route('auth.login.show'); ?>" class="btn btn-link">Already registered? Sign in</a>
         </div>
     </form>
 </div>

@@ -18,6 +18,8 @@ class Router
     private static array $middlewares = [];
     private static string $prefix = '';
     private static array $groupMiddlewares = [];
+    private static string $namePrefix = '';
+    private static array $namedRoutes = [];
 
     /**
      * Create a route group with shared attributes.
@@ -26,6 +28,7 @@ class Router
     {
         $previousPrefix = self::$prefix;
         $previousMiddlewares = self::$groupMiddlewares;
+        $previousNamePrefix = self::$namePrefix;
 
         self::$prefix .= $attributes['prefix'] ?? '';
         if (isset($attributes['middleware'])) {
@@ -33,50 +36,68 @@ class Router
             self::$groupMiddlewares = array_merge(self::$groupMiddlewares, $middlewares);
         }
 
+        if (isset($attributes['name'])) {
+            $nameSegment = trim((string) $attributes['name']);
+            if ($nameSegment !== '') {
+                $normalized = rtrim($nameSegment, '.') . '.';
+                self::$namePrefix .= $normalized;
+            }
+        }
+
         $callback();
 
         self::$prefix = $previousPrefix;
         self::$groupMiddlewares = $previousMiddlewares;
+        self::$namePrefix = $previousNamePrefix;
     }
 
     /**
      * Register a route for a specific HTTP verb.
      */
-    private static function addRoute(string $method, string $route, array $action, mixed $middlewares = null): void
+    private static function addRoute(string $method, string $route, array $action, mixed $middlewares = null): RouteDefinition
     {
+        $method = strtoupper($method);
         $fullRoute = self::$prefix . '/' . trim($route, '/');
         $fullRoute = '/' . trim($fullRoute, '/');
+        if ($fullRoute === '//') {
+            $fullRoute = '/';
+        }
 
         $normalizedMiddlewares = self::normalizeMiddlewareList($middlewares);
         $allMiddlewares = array_merge(self::$groupMiddlewares, $normalizedMiddlewares);
 
-        self::$routes[strtoupper($method)][$fullRoute] = $action;
-        self::$middlewares[strtoupper($method)][$fullRoute] = $allMiddlewares;
+        self::$routes[$method][$fullRoute] = [
+            'action' => $action,
+            'name' => null,
+        ];
+        self::$middlewares[$method][$fullRoute] = $allMiddlewares;
+
+        return new RouteDefinition($method, $fullRoute, self::$namePrefix);
     }
 
-    public static function get(string $route, array $action, mixed $middlewares = null): void
+    public static function get(string $route, array $action, mixed $middlewares = null): RouteDefinition
     {
-        self::addRoute('GET', $route, $action, $middlewares);
+        return self::addRoute('GET', $route, $action, $middlewares);
     }
 
-    public static function post(string $route, array $action, mixed $middlewares = null): void
+    public static function post(string $route, array $action, mixed $middlewares = null): RouteDefinition
     {
-        self::addRoute('POST', $route, $action, $middlewares);
+        return self::addRoute('POST', $route, $action, $middlewares);
     }
 
-    public static function put(string $route, array $action, mixed $middlewares = null): void
+    public static function put(string $route, array $action, mixed $middlewares = null): RouteDefinition
     {
-        self::addRoute('PUT', $route, $action, $middlewares);
+        return self::addRoute('PUT', $route, $action, $middlewares);
     }
 
-    public static function patch(string $route, array $action, mixed $middlewares = null): void
+    public static function patch(string $route, array $action, mixed $middlewares = null): RouteDefinition
     {
-        self::addRoute('PATCH', $route, $action, $middlewares);
+        return self::addRoute('PATCH', $route, $action, $middlewares);
     }
 
-    public static function delete(string $route, array $action, mixed $middlewares = null): void
+    public static function delete(string $route, array $action, mixed $middlewares = null): RouteDefinition
     {
-        self::addRoute('DELETE', $route, $action, $middlewares);
+        return self::addRoute('DELETE', $route, $action, $middlewares);
     }
 
     /**
@@ -86,21 +107,22 @@ class Router
     {
         $request = Request::capture();
         $requestUri = trim($requestUri, '/');
-        $routes = self::$routes[strtoupper($requestMethod)] ?? [];
+        $method = strtoupper($requestMethod);
+        $routes = self::$routes[$method] ?? [];
 
-        foreach ($routes as $route => $action) {
+        foreach ($routes as $route => $definition) {
             try {
                 $pattern = self::compileRouteToRegex($route);
 
                 if (preg_match($pattern, $requestUri, $matches)) {
                     $parameters = self::extractRouteParameters($matches);
 
-                    $middlewareResponse = self::validateMiddlewares($route, strtoupper($requestMethod));
+                    $middlewareResponse = self::validateMiddlewares($route, $method);
                     if ($middlewareResponse instanceof Response) {
                         return $middlewareResponse;
                     }
 
-                    $result = self::callAction($action, $parameters);
+                    $result = self::callAction($definition['action'], $parameters);
 
                     return Response::resolve($result);
                 }
@@ -423,6 +445,184 @@ class Router
         return class_exists($value);
     }
 
+    public static function getRoutes(): array
+    {
+        $routes = [];
+
+        foreach (self::$routes as $method => $definitions) {
+            foreach ($definitions as $path => $definition) {
+                $action = $definition['action'];
+                $actionString = self::formatAction($action);
+                $name = $definition['name'] ?? null;
+                $middleware = self::$middlewares[$method][$path] ?? [];
+
+                $routes[] = [
+                    'method' => $method,
+                    'uri' => $path,
+                    'name' => $name,
+                    'action' => $actionString,
+                    'middleware' => array_map(
+                        static fn ($entry) => self::stringifyMiddleware($entry),
+                        $middleware
+                    ),
+                ];
+            }
+        }
+
+        usort($routes, static function (array $a, array $b): int {
+            return [$a['uri'], $a['method']] <=> [$b['uri'], $b['method']];
+        });
+
+        return $routes;
+    }
+
+    private static function formatAction(mixed $action): string
+    {
+        if (is_array($action) && count($action) === 2 && is_string($action[0]) && is_string($action[1])) {
+            return $action[0] . '@' . $action[1];
+        }
+
+        if (is_string($action)) {
+            return $action;
+        }
+
+        if ($action instanceof \Closure) {
+            return 'Closure';
+        }
+
+        return 'Callable';
+    }
+
+    private static function stringifyMiddleware(mixed $entry): string
+    {
+        if (is_string($entry)) {
+            return $entry;
+        }
+
+        if (is_array($entry) && isset($entry[0])) {
+            $class = (string) $entry[0];
+            $parameters = array_map('strval', array_slice($entry, 1));
+
+            if ($parameters === []) {
+                return $class;
+            }
+
+            return $class . ':' . implode(',', $parameters);
+        }
+
+        return (string) $entry;
+    }
+
+    public static function appendRouteMiddleware(string $method, string $path, mixed $middlewares): void
+    {
+        $method = strtoupper($method);
+        $append = self::normalizeMiddlewareList($middlewares);
+
+        if ($append === []) {
+            return;
+        }
+
+        if (!isset(self::$middlewares[$method][$path])) {
+            self::$middlewares[$method][$path] = [];
+        }
+
+        self::$middlewares[$method][$path] = array_merge(self::$middlewares[$method][$path], $append);
+    }
+
+    public static function registerRouteName(string $method, string $path, string $name, string $prefix = ''): void
+    {
+        $name = trim($name);
+
+        if ($name === '') {
+            throw new InvalidArgumentException('Route name cannot be empty.');
+        }
+
+        $method = strtoupper($method);
+
+        if (!isset(self::$routes[$method][$path])) {
+            throw new InvalidArgumentException(sprintf('Route [%s %s] is not registered.', $method, $path));
+        }
+
+        $prefix = trim($prefix);
+        if ($prefix !== '') {
+            $prefix = rtrim($prefix, '.');
+            if ($prefix !== '') {
+                $name = $prefix . '.' . ltrim($name, '.');
+            }
+        }
+
+        $current = self::$routes[$method][$path]['name'] ?? null;
+
+        if ($current === $name) {
+            return;
+        }
+
+        if (isset(self::$namedRoutes[$name]) && (self::$namedRoutes[$name]['method'] !== $method || self::$namedRoutes[$name]['path'] !== $path)) {
+            throw new InvalidArgumentException(sprintf('Route name [%s] is already in use.', $name));
+        }
+
+        if ($current !== null && isset(self::$namedRoutes[$current])) {
+            unset(self::$namedRoutes[$current]);
+        }
+
+        self::$routes[$method][$path]['name'] = $name;
+        self::$namedRoutes[$name] = [
+            'method' => $method,
+            'path' => $path,
+        ];
+    }
+
+    public static function route(string $name, array $parameters = [], bool $absolute = true): string
+    {
+        if (!isset(self::$namedRoutes[$name])) {
+            throw new InvalidArgumentException(sprintf('Route [%s] is not defined.', $name));
+        }
+
+        $definition = self::$namedRoutes[$name];
+        $uri = self::substituteRouteParameters($definition['path'], $parameters);
+
+        if (preg_match('/\{[^}]+\}/', $uri)) {
+            throw new InvalidArgumentException(sprintf('Route [%s] is missing required parameters.', $name));
+        }
+
+        $uri = $uri === '' ? '/' : '/' . ltrim($uri, '/');
+
+        if (!empty($parameters)) {
+            $query = http_build_query($parameters);
+            if ($query !== '') {
+                $uri .= '?' . $query;
+            }
+        }
+
+        if (! $absolute) {
+            return $uri;
+        }
+
+        $base = rtrim((string) env('APP_URL', ''), '/');
+
+        if ($base === '') {
+            return $uri;
+        }
+
+        return $base . ($uri === '/' ? '/' : $uri);
+    }
+
+    private static function substituteRouteParameters(string $uri, array &$parameters): string
+    {
+        return preg_replace_callback('/\{([a-zA-Z0-9_]+)\}/', function (array $matches) use (&$parameters): string {
+            $key = $matches[1];
+
+            if (!array_key_exists($key, $parameters)) {
+                throw new InvalidArgumentException(sprintf('Missing parameter [%s] for route generation.', $key));
+            }
+
+            $value = $parameters[$key];
+            unset($parameters[$key]);
+
+            return rawurlencode((string) $value);
+        }, $uri);
+    }
+
     private static function normalizeMiddleware(mixed $definition): array
     {
         if (is_array($definition)) {
@@ -443,5 +643,26 @@ class Router
         }
 
         return [$definition, []];
+    }
+}
+
+final class RouteDefinition
+{
+    public function __construct(private string $method, private string $path, private string $namePrefix)
+    {
+    }
+
+    public function name(string $name): self
+    {
+        Router::registerRouteName($this->method, $this->path, $name, $this->namePrefix);
+
+        return $this;
+    }
+
+    public function middleware(mixed $middlewares): self
+    {
+        Router::appendRouteMiddleware($this->method, $this->path, $middlewares);
+
+        return $this;
     }
 }

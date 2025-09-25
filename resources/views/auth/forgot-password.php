@@ -17,7 +17,7 @@ View::startSection('content');
         </div>
     <?php endif; ?>
 
-    <form method="POST" action="/password/forgot" class="card shadow-sm p-4">
+    <form method="POST" action="<?= route('auth.password.email'); ?>" class="card shadow-sm p-4">
         <div class="mb-3">
             <label for="email" class="form-label">Email address</label>
             <input
@@ -37,7 +37,7 @@ View::startSection('content');
 
         <div class="d-grid gap-2">
             <button type="submit" class="btn btn-primary">Email Password Reset Link</button>
-            <a href="/login" class="btn btn-link">Back to sign in</a>
+            <a href="<?= route('auth.login.show'); ?>" class="btn btn-link">Back to sign in</a>
         </div>
     </form>
 </div>

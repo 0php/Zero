@@ -11,34 +11,33 @@ use App\Middlewares\Guest as GuestMiddleware;
 use App\Middlewares\Role as RoleMiddleware;
 use Zero\Lib\Router;
 
-Router::get('/', [HomeController::class, 'index']);
+Router::get('/', [HomeController::class, 'index'])->name('home');
 
 // Guest-only authentication routes
-Router::group(['middleware' => GuestMiddleware::class], function () {
-    Router::get('/register', [RegisterController::class, 'show']);
-    Router::post('/register', [RegisterController::class, 'store']);
+Router::group(['middleware' => GuestMiddleware::class, 'name' => 'auth'], function () {
+    Router::get('/register', [RegisterController::class, 'show'])->name('register.show');
+    Router::post('/register', [RegisterController::class, 'store'])->name('register.store');
 
-    Router::get('/login', [AuthController::class, 'showLogin']);
-    Router::post('/login', [AuthController::class, 'login']);
+    Router::get('/login', [AuthController::class, 'showLogin'])->name('login.show');
+    Router::post('/login', [AuthController::class, 'login'])->name('login.attempt');
 
-    Router::group(['prefix' => '/password'], function () {
-        Router::get('/forgot', [PasswordResetController::class, 'request']);
-        Router::post('/forgot', [PasswordResetController::class, 'email']);
-        Router::get('/reset/{token}', [PasswordResetController::class, 'show']);
-        Router::post('/reset', [PasswordResetController::class, 'update']);
+    Router::group(['prefix' => '/password', 'name' => 'password'], function () {
+        Router::get('/forgot', [PasswordResetController::class, 'request'])->name('forgot');
+        Router::post('/forgot', [PasswordResetController::class, 'email'])->name('email');
+        Router::get('/reset/{token}', [PasswordResetController::class, 'show'])->name('reset');
+        Router::post('/reset', [PasswordResetController::class, 'update'])->name('update');
     });
 });
 
 // Routes that support both guests and authenticated users
-Router::group(['prefix' => '/email'], function () {
-    Router::get('/verify', [EmailVerificationController::class, 'notice']);
-    Router::get('/verify/{token}', [EmailVerificationController::class, 'verify']);
-    Router::post('/verification-notification', [EmailVerificationController::class, 'resend']);
+Router::group(['prefix' => '/email', 'name' => 'email'], function () {
+    Router::get('/verify', [EmailVerificationController::class, 'notice'])->name('verify.notice');
+    Router::get('/verify/{token}', [EmailVerificationController::class, 'verify'])->name('verify.process');
+    Router::post('/verification-notification', [EmailVerificationController::class, 'resend'])->name('verification.resend');
 });
 
 // Authenticated-only routes
-Router::group(['middleware' => [AuthMiddleware::class]], function () {
-    Router::post('/logout', [AuthController::class, 'logout']);
-    Router::get('/dashboard', [DashboardController::class, 'index']);
+Router::group(['middleware' => [AuthMiddleware::class], 'name' => 'auth'], function () {
+    Router::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    Router::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 });
-

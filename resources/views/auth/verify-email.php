@@ -18,7 +18,7 @@ View::startSection('content');
     <?php endif; ?>
 
     <div class="card shadow-sm p-4">
-        <form method="POST" action="/email/verification-notification" class="mb-3">
+        <form method="POST" action="<?= route('email.verification.resend'); ?>" class="mb-3">
             <div class="mb-3">
                 <label for="email" class="form-label">Resend verification link</label>
                 <input
@@ -38,7 +38,7 @@ View::startSection('content');
 
             <div class="d-grid gap-2">
                 <button type="submit" class="btn btn-primary">Send Email</button>
-                <a href="/login" class="btn btn-link">Return to sign in</a>
+                <a href="<?= route('auth.login.show'); ?>" class="btn btn-link">Return to sign in</a>
             </div>
         </form>
     </div>

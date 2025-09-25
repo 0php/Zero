@@ -11,6 +11,7 @@ class {{ class }}
 {
     public function index(Request $request): Response
     {
-        return Response::html('Controller {{ class }} ready.');
+        // return View::render('pages.example');
+        return Response::redirectRoute('home');
     }
 }

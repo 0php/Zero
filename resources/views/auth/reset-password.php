@@ -19,7 +19,7 @@ View::startSection('content');
         </div>
     <?php endif; ?>
 
-    <form method="POST" action="/password/reset" class="card shadow-sm p-4">
+    <form method="POST" action="<?= route('auth.password.update'); ?>" class="card shadow-sm p-4">
         <input type="hidden" name="token" value="{{ $token }}">
         <input type="hidden" name="email" value="{{ $email }}">
 
@@ -35,7 +35,7 @@ View::startSection('content');
 
         <div class="d-grid gap-2">
             <button type="submit" class="btn btn-primary">Reset Password</button>
-            <a href="/login" class="btn btn-link">Back to sign in</a>
+            <a href="<?= route('auth.login.show'); ?>" class="btn btn-link">Back to sign in</a>
         </div>
     </form>
 </div>

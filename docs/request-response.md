@@ -86,6 +86,8 @@ Controllers can return a wide range of values; the router normalises them with `
 - `Response::text($string)` / `Response::html($markup)` / `Response::xml($xml)`
 - `Response::api($statusLabel, $payload, $statusCode)` – opinionated API envelope.
 - `Response::redirect($location, $status)` – sets the `Location` header.
+- `Response::redirectRoute($name, $parameters = [], $absolute = true, $status = 302)` – generates a URL from a named route and issues a redirect in one call.
+- `Response::redirectBack($fallback = '/', $status = 302)` – falls back to the provided URI when the `Referer` header is missing or empty.
 - `Response::stream($callbackOrString)` – SSE or streaming responses.
 
 Global helper functions `response($value, $status = 200, $headers = [])` and `view($template, $data, $status)` wrap these factories so controllers and services can normalise return payloads consistently.

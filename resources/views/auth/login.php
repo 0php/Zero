@@ -15,7 +15,7 @@ View::startSection('content');
         </div>
     <?php endif; ?>
 
-    <form method="POST" action="/login" class="card shadow-sm p-4">
+    <form method="POST" action="<?= route('auth.login.attempt'); ?>" class="card shadow-sm p-4">
         <div class="mb-3">
             <label for="email" class="form-label">Email</label>
             <input
@@ -51,9 +51,9 @@ View::startSection('content');
 
         <div class="d-grid gap-2">
             <button type="submit" class="btn btn-primary">Log In</button>
-            <a href="/password/forgot" class="btn btn-link">Forgot password?</a>
-            <a href="/register" class="btn btn-link">Create an account</a>
-            <a href="/" class="btn btn-link">Back to home</a>
+            <a href="<?= route('auth.password.forgot'); ?>" class="btn btn-link">Forgot password?</a>
+            <a href="<?= route('auth.register.show'); ?>" class="btn btn-link">Create an account</a>
+            <a href="<?= route('home'); ?>" class="btn btn-link">Back to home</a>
         </div>
     </form>
 </div>

@@ -155,10 +155,23 @@ if (!function_exists('zero_build_error_response')) {
         $html = null;
 
         if (class_exists('Zero\\Lib\\View')) {
-            try {
-                $html = \Zero\Lib\View::render('errors/' . $status, $viewData);
-            } catch (\Throwable) {
-                $html = null;
+            $candidates = ['errors/' . $status];
+
+            if ($status >= 400 && $status < 500) {
+                $candidates[] = 'errors/4xx';
+            } elseif ($status >= 500) {
+                $candidates[] = 'errors/5xx';
+            }
+
+            foreach ($candidates as $viewName) {
+                try {
+                    $html = \Zero\Lib\View::render($viewName, $viewData);
+                    if ($html !== null) {
+                        break;
+                    }
+                } catch (\Throwable) {
+                    $html = null;
+                }
             }
         }
 

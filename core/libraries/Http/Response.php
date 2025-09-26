@@ -11,6 +11,7 @@ use Traversable;
 use Zero\Lib\Http\Traits\BuildsResponse;
 use Zero\Lib\Http\Traits\ManagesHeaders;
 use Zero\Lib\Http\Traits\StreamsResponse;
+use Zero\Lib\Router;
 
 class Response
 {
@@ -78,6 +79,21 @@ class Response
     public static function redirect(string $location, int $status = 302, array $headers = []): static
     {
         return static::make('', $status, $headers)->header('Location', $location);
+    }
+
+    public static function redirectRoute(string $name, array $parameters = [], bool $absolute = true, int $status = 302, array $headers = []): static
+    {
+        $url = Router::route($name, $parameters, $absolute);
+
+        return static::redirect($url, $status, $headers);
+    }
+
+    public static function redirectBack(string $fallback = '/', int $status = 302, array $headers = []): static
+    {
+        $referer = Request::instance()->header('referer', $fallback);
+        $target = $referer !== null && $referer !== '' ? $referer : $fallback;
+
+        return static::redirect($target, $status, $headers);
     }
 
     public static function stream(callable|string $stream, int $status = 200, array $headers = []): static

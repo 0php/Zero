@@ -148,6 +148,14 @@ php zero storage:link
 
 Creates symbolic links defined in `config/storage.php` (by default linking `public/storage` to the public disk). The command skips existing links and reports missing targets.
 
+### Inspect Registered Routes
+
+```bash
+php zero route:list
+```
+
+Bootstraps `routes/web.php` and prints a table with the HTTP method, URI, route name (when available), controller action, and attached middleware stack. Use it to confirm route bindings after adding groups, name prefixes, or new controllers.
+
 ### Update to Latest Release
 
 - Fetches a JSON manifest from the URL configured via `UPDATE_MANIFEST_URL`.

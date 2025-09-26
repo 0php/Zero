@@ -22,6 +22,7 @@ use Zero\Lib\Console\Commands\MigrateFreshCommand;
 use Zero\Lib\Console\Commands\MigrateRefreshCommand;
 use Zero\Lib\Console\Commands\RollbackCommand;
 use Zero\Lib\Console\Commands\SeedCommand;
+use Zero\Lib\Console\Commands\RouteListCommand;
 use Zero\Lib\Console\Commands\ServeCommand;
 use Zero\Lib\Console\Commands\StorageLinkCommand;
 
@@ -53,6 +54,7 @@ final class Application
         $this->addCommand(new MakeServiceCommand());
         $this->addCommand(new MakeCommandCommand());
         $this->addCommand(new SeedCommand());
+        $this->addCommand(new RouteListCommand());
         $this->addCommand(new KeyGenerateCommand());
         $this->addCommand(new StorageLinkCommand());
 

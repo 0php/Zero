@@ -53,6 +53,39 @@ echo $users[0]->roles_total; // hydrated count alias
 
 Use `toBase()` to access the underlying DBML builder when you need low-level control (e.g., custom aggregates).
 
+### Filtering by Relationships
+
+Reach for `whereHas()` and `whereDoesntHave()` when you need to constrain a model query based on related records. The API mirrors Eloquent and accepts nested relation paths as well as optional callbacks to add additional constraints.
+
+```php
+use Zero\Lib\Model\ModelQuery;
+
+// Users who have at least one published post
+$authors = User::query()
+    ->whereHas('posts', function (ModelQuery $query) {
+        $query->where('published', true);
+    })
+    ->get();
+
+// Users without any posts at all
+$lurkers = User::query()->whereDoesntHave('posts')->get();
+
+// Nested relations: authors with a post that has a 5-star review
+$topRated = User::query()
+    ->whereHas('posts.reviews', function (ModelQuery $query) {
+        $query->where('rating', '>=', 5);
+    })
+    ->get();
+
+// OR variants are available as well
+$featured = User::query()
+    ->whereHas('posts', fn ($q) => $q->where('featured', true))
+    ->orWhereHas('roles', fn ($q) => $q->where('name', 'editor'))
+    ->get();
+```
+
+Callbacks receive the underlying `ModelQuery` instance, so any of the fluent builder methods (including `with`, `withCount`, `orderBy`, etc.) are available inside. When filtering nested relations, required parameters are automatically enforced—missing route parameters will throw an exception to help you spot mistakes early.
+
 ### Pagination
 
 ```php

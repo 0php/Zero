@@ -25,7 +25,7 @@ abstract class Seeder
 
         foreach ($list as $seeder) {
             $instance = $this->resolveSeeder($seeder);
-            Log::channel('stderr')->info("Running seeder: ".$seeder);
+            Log::channel('internal')->info("Running seeder: ".$seeder);
             $instance->run();
         }
     }

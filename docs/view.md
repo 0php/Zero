@@ -43,7 +43,7 @@ Both `@layout` and `@include` accept an optional second argument to pass an asso
 - Partials: `@include('components.head')`, `@include('components.toast', ['message' => $message])`
 - Debugging: `@dd($value)`
 
-## Manual API (Legacy-Friendly)
+## Manual API
 
 You can still work with the low-level `View` API if you prefer the original, directive-free approach or need to mix plain PHP in templates.
 
@@ -55,9 +55,9 @@ You can still work with the low-level `View` API if you prefer the original, dir
 <?php View::endSection(); ?>
 
 <!-- In a layout file -->
-<?php include base('resources/views/components/head.php'); ?>
+<?php View::include('components/head.php'); ?>
 <?php echo View::yieldSection('content'); ?>
-<?php include base('resources/views/components/footer.php'); ?>
+<?php View::include('components/footer.php'); ?>
 ```
 
 The static helpers (`View::layout`, `View::startSection`, `View::endSection`, `View::yieldSection`, `View::include`) remain available and behave the same way the directives expand under the hood, so both styles can coexist in the same project.

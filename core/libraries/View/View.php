@@ -2,6 +2,7 @@
 namespace Zero\Lib;
 
 use Exception;
+use Zero\Lib\View\ViewCompiler;
 
 class View
 {
@@ -117,10 +118,14 @@ class View
         if (!file_exists($viewFile)) {
             throw new Exception("View file {$viewFile} not found.");
         }
+
         if ($data !== []) {
             extract($data, EXTR_SKIP);
         }
-        include $viewFile;
+
+        $compiled = self::compileTemplate('include:' . $viewPath, $viewFile);
+
+        eval('?>' . $compiled);
     }
 
     /**
@@ -254,106 +259,7 @@ class View
      */
     private static function processDirectives(string $content): string
     {
-        $escapedTriplePlaceholder = '__ESCAPED_TRIPLE_BRACE_OPEN__';
-        $escapedDoublePlaceholder = '__ESCAPED_DOUBLE_BRACE_OPEN__';
-
-        $content = str_replace('@{{{', $escapedTriplePlaceholder, $content);
-        $content = str_replace('@{{', $escapedDoublePlaceholder, $content);
-
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'foreach',
-            fn(string $arguments) => "<?php foreach ({$arguments}): ?>"
-        );
-        $content = str_replace('@endforeach', '<?php endforeach; ?>', $content);
-
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'for',
-            fn(string $arguments) => "<?php for ({$arguments}): ?>"
-        );
-        $content = str_replace('@endfor', '<?php endfor; ?>', $content);
-
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'if',
-            fn(string $arguments) => "<?php if ({$arguments}): ?>"
-        );
-        $content = str_replace('@endif', '<?php endif; ?>', $content);
-
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'elseif',
-            fn(string $arguments) => "<?php elseif ({$arguments}): ?>"
-        );
-        $content = str_replace('@else', '<?php else: ?>', $content);
-
-        $content = preg_replace_callback('/{{{(.*?)}}}/', fn($matches) => "<?php echo {$matches[1]}; ?>", $content);
-        $content = preg_replace_callback(
-            '/{{\s*(.+?)\s*}}/',
-            fn($matches) => "<?php echo htmlspecialchars(({$matches[1]}) ?? '', ENT_QUOTES, 'UTF-8'); ?>",
-            $content
-        );
-
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'include',
-            fn(string $arguments) => "<?php View::include({$arguments}); ?>"
-        );
-
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'yield',
-            fn(string $arguments) => "<?php echo View::yieldSection({$arguments}); ?>"
-        );
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'layout',
-            fn(string $arguments) => "<?php View::layout({$arguments}); ?>"
-        );
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'section',
-            fn(string $arguments) => "<?php View::startSection({$arguments}); ?>"
-        );
-        $content = str_replace('@endsection', '<?php View::endSection(); ?>', $content);
-
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'dd',
-            fn(string $arguments) => "<?php dd({$arguments}); ?>"
-        );
-
-        $content = self::replaceDirectiveWithArguments(
-            $content,
-            'php',
-            function (string $arguments): string {
-                if ($arguments === '' || substr($arguments, -1) !== ';') {
-                    $arguments .= ';';
-                }
-
-                return "<?php {$arguments} ?>";
-            }
-        );
-
-        $content = preg_replace('/(?<!\\w)@php(?!\s*\()/m', '<?php', $content);
-        $content = preg_replace('/(?<!\\w)@endphp(?!\\w)/m', '?>', $content);
-
-        $content = str_replace($escapedTriplePlaceholder, '{{{', $content);
-        $content = str_replace($escapedDoublePlaceholder, '{{', $content);
-
-        return $content;
-    }
-
-    private static function replaceDirectiveWithArguments(string $content, string $directive, callable $handler): string
-    {
-        $pattern = '/@' . preg_quote($directive, '/') . '\s*(\((?:[^()]+|(?1))*\))/m';
-
-        return preg_replace_callback($pattern, function (array $matches) use ($handler) {
-            $arguments = substr($matches[1], 1, -1);
-
-            return $handler(trim($arguments));
-        }, $content);
+        return ViewCompiler::compile($content);
     }
 
     private static function normalizeViewName(string $view): string

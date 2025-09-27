@@ -43,7 +43,7 @@ Both `@layout` and `@include` accept an optional second argument to pass an asso
 - Partials: `@include('components.head')`, `@include('components.toast', ['message' => $message])`
 - Debugging: `@dd($value)`
 
-## Manual API (Legacy-Friendly)
+## Manual API
 
 You can still work with the low-level `View` API if you prefer the original, directive-free approach or need to mix plain PHP in templates.
 

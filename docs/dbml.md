@@ -1,26 +1,23 @@
 # DBML Query Builder
 
-Database Management Layer (DBML) provides the fluent query interface used throughout the framework. For schema changes, rely on the migration DBAL described in migrations.md.
-
-`Zero\Lib\DB\DBML` is a lightweight, fluent SQL builder that mirrors the ergonomics of Laravel's query builder while keeping dependencies to a minimum. It speaks to the framework's PDO bridge, so the same code runs against MySQL, PostgreSQL, or SQLite with no driver-specific conditionals.
-
-## Getting Started
+Database Management Layer (DBML) is the fluent SQL builder that powers models, console helpers, and ad-hoc data scripts in Zero. It wraps the framework's PDO bridge, so the same chains work against MySQL, PostgreSQL, or SQLite without vendor conditionals.
 
 ```php
 use Zero\Lib\DB\DBML;
 
-$users = DBML::table('users as u')
-    ->select(['u.id', 'u.name', 'u.email'])
+$rows = DBML::table('users as u')
+    ->select('u.id', 'u.name', 'u.email')
     ->where('u.active', 1)
     ->orderByDesc('u.created_at')
     ->limit(10)
     ->get();
 ```
 
-- Pass `table AS alias` (or the second `$alias` argument) to work with concise column names.
-- `get()` returns an array of associative rows, making it easy to return JSON responses or hydrate models manually.
-
 ## Selecting Columns
+
+- `select()` accepts strings, arrays, or `DBML::raw()` expressions.
+- `addSelect()` appends columns without resetting the previous selection.
+- `selectRaw()` records raw fragments while still binding parameters you pass alongside.
 
 ```php
 $users = DBML::table('users')
@@ -30,35 +27,32 @@ $users = DBML::table('users')
     ->get();
 ```
 
-- `select()` accepts strings, arrays, or `DBML::raw()` expressions.
-- `addSelect()` appends more columns without resetting the previous selection.
-- `selectRaw()` stores raw fragments while still binding parameters safely.
-
 ## Filtering Data
 
 Builder methods compose WHERE clauses intuitively:
 
 ```php
 $users = DBML::table('users')
-    ->where('status', 'active')                // column = value
-    ->orWhere(fn ($query) =>                   // nested conditions
+    ->where('status', 'active')
+    ->orWhere(fn ($query) =>
         $query->whereBetween('age', [18, 25])
               ->whereNull('deleted_at')
     )
     ->whereIn('country', ['US', 'CA'])
-    ->whereInSet('roles', ['author', 'editor']) // match CSV/SET columns using FIND_IN_SET
+    ->whereInSet('roles', ['author', 'editor']) // FIND_IN_SET style
     ->when($request->input('q'), function ($query, $term) {
         $query->where('name', 'LIKE', "%{$term}%");
     })
     ->get();
 ```
 
-Key helpers:
+Convenience helpers include:
 
-- `where()`, `orWhere()`, `whereNot()` for basic comparisons.
-- `whereIn()`, `whereNotIn()`, `whereInSet()`, `whereNotInSet()`, `whereNull()`, `whereBetween()` and their `or...` counterparts.
-- `whereRaw()` (and `havingRaw()`) for advanced clauses while still binding values manually.
-- `when($value, $callback, $default)` to apply conditional logic without `if` blocks.
+- `whereAny($columns, $value)` / `orWhereAny()` – match the value against any column in the list.
+- `whereAnyLike($columns, $value, wildcard: 'both')` / `orWhereAnyLike()` – shorthand for multi-column LIKE checks.
+- `whereIn()`, `whereNotIn()`, `whereInSet()`, `whereBetween()`, `whereNull()`, and their `or...` variants.
+- `whereExists()` / `whereNotExists()` with nested queries via closures.
+- `whereNested(fn ($q) => ...)` and `when()` for clean conditional logic.
 
 ## Joining Tables
 
@@ -70,7 +64,7 @@ $posts = DBML::table('posts as p')
     ->get();
 ```
 
-Supported joins: `join()` (inner), `leftJoin()`, and `rightJoin()`. Provide the join alias as part of the table string (`'users as u'`) or via the optional fifth argument.
+Supported joins: `join()` (inner), `leftJoin()`, and `rightJoin()`. Provide aliases either inline (`'users as u'`) or via the optional arguments.
 
 ## Grouping, Aggregates & Existence Checks
 
@@ -87,12 +81,7 @@ $emails = DBML::table('users')->pluck('email');
 $hasAdmins = DBML::table('users')->where('role', 'admin')->exists();
 ```
 
-- `count()` runs a `COUNT(*)` aggregate (or any column you pass).
-- `value()` fetches a single column from the first row.
-- `pluck()` returns a flat list or key/value map.
-- `exists()` stops after the first match for efficient checks.
-
-## Sorting & Pagination
+### Ordering & Pagination
 
 ```php
 $paginated = DBML::table('users')
@@ -104,21 +93,16 @@ foreach ($paginated->items() as $user) {
 }
 ```
 
-Tools you have at your disposal:
+- `orderBy()`, `orderByDesc()`, and `orderByRaw()`.
+- `limit()`, `offset()`, `forPage()` for manual pagination.
+- `paginate()` issues a total count; `simplePaginate()` skips it for faster infinite-scroll views. Both return `Zero\Lib\Support\Paginator` with helpers (`items()`, `total()`, `perPage()`, `hasMorePages()`, ...).
 
-- `orderBy()`, `orderByDesc()`, and `orderByRaw()`
-- `limit()`, `offset()`, and `forPage()`
-- `paginate($perPage, $page)` – runs an extra `COUNT(*)` to compute totals
-- `simplePaginate()` – skips the count when you only care about “has next page”
-
-`paginate()` and `simplePaginate()` return `Zero\Lib\Support\Paginator`, which exposes helpers like `items()`, `total()`, `perPage()`, `currentPage()`, and `hasMorePages()`.
-
-## Writing Data
+## Mutating Data
 
 ```php
 DBML::table('users')->insert([
     'name' => 'Ada Lovelace',
-    'email' => 'ada@example.com',
+    'email' => 'dev@zerophp.com',
 ]);
 
 DBML::table('users')
@@ -130,11 +114,9 @@ DBML::table('sessions')
     ->delete();
 ```
 
-- `insert()` accepts a single associative array or an array of rows; returns the last insert ID reported by the driver.
-- `update()` returns the number of affected rows; provide a `where()` clause to avoid touching the entire table.
-- `delete()` removes matching rows and returns the affected count.
-
-Every write method uses prepared statements to avoid SQL injection. Wrap multiple operations in a transaction via the `Database` facade if you need atomic behaviour.
+- `insert()` accepts a single associative array or an array of rows; returns the last insert ID reported by the driver where available.
+- `update()` and `delete()` return the number of affected rows.
+- Wrap several statements in a transaction via the `Zero\Lib\Database` facade when you need atomic work.
 
 ## Raw Expressions & Debugging
 
@@ -147,11 +129,11 @@ $sql = $query->toSql();          // SELECT id, JSON_EXTRACT(...) FROM ...
 $bindings = $query->getBindings();
 ```
 
-`DBML::raw()` (or the `DBMLExpression` objects it returns) tell the builder not to quote identifiers. `toSql()` reveals the generated SQL with placeholders, while `getBindings()` exposes the values that will be bound at execution time—ideal for logging or debugging.
+`DBML::raw()` lets you embed vendor-specific syntax while the builder still handles bindings everywhere else. `toSql()` reveals the generated SQL with placeholders and `getBindings()` exposes the values that will be bound at execution time.
 
-## Using DBML with Models
+## Working Alongside Models
 
-`Zero\Lib\Model\Model` delegates to the same builder under the hood. You can drop down to DBML whenever you need more control:
+`Zero\Lib\Model\Model` delegates to DBML under the hood. Use `Model::query()` for hydrated models and drop down to DBML whenever you need raw arrays or advanced constructs:
 
 ```php
 use App\Models\User;
@@ -160,20 +142,20 @@ $recent = User::query()
     ->where('active', 1)
     ->orderByDesc('created_at')
     ->forPage(1, 10)
-    ->get();        // array of User model instances
+    ->get();        // array of User instances
 
-$rawRows = User::query()->toBase()->get(); // plain arrays via DBML
+$rawRows = User::query()->toBase()->get(); // underlying DBML builder
 ```
 
-`Model::query()` starts a builder scoped to the model's table, and `toBase()` gives you direct access to the underlying DBML instance when you want raw arrays instead of model objects.
+See the [Models guide](models.md) for relationship helpers, lifecycle hooks, and attribute utilities. For deeper internals inspect `core/libraries/DB/QueryBuilder.php`; the `DBML` facade simply forwards to that class.
 
-## Summary of Capabilities
+## Feature Checklist
 
-- Fluent, chainable API for SELECT/INSERT/UPDATE/DELETE.
-- Rich filtering: nested closures, `whereIn`, `whereBetween`, `whereNull`, and conditionally applied clauses.
+- Fluent, chainable API for SELECT / INSERT / UPDATE / DELETE.
+- Rich filtering: nested closures, multi-column helpers, `whereIn`, `whereBetween`, `whereNull`, `whereExists`, and conditionally applied clauses via `when()`.
 - Join support with alias handling and automatic identifier quoting.
-- Aggregation helpers (`count`, `exists`, `value`, `pluck`).
-- Pagination primitives (`limit`, `offset`, `forPage`) plus ready-to-use `paginate` helpers.
+- Aggregation helpers (`count`, `exists`, `value`, `pluck`) and HAVING support.
+- Pagination primitives plus ready-to-use paginator objects.
 - Debug tooling via `toSql()` and `getBindings()`.
 
-For deeper internals, explore `core/libraries/DB/QueryBuilder.php`—`DBML` simply extends it to expose a concise facade for your application code.
+DBML stays intentionally small—no global state, no magic. Compose precise SQL with predictable behaviour, and reach for models only when you want higher-level conveniences.

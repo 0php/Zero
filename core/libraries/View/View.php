@@ -8,6 +8,7 @@ class View
     private static array $sections = [];
     private static ?string $currentSection = null;
     private static ?string $layout = null;
+    private static array $layoutData = [];
     private static array $config = [
         'cache_enabled' => false,
         'cache_path' => '/storage/cache/views',
@@ -32,15 +33,16 @@ class View
     {
         self::resetState();
 
-        $viewFile = base("resources/views/{$view}.php");
+        $viewPath = self::normalizeViewName($view);
+        $viewFile = base("resources/views/{$viewPath}.php");
 
         if (!file_exists($viewFile)) {
             throw new Exception("View file {$viewFile} not found.");
         }
 
-        $compiledView = self::compileTemplate($view, $viewFile);
+        $compiledView = self::compileTemplate($viewPath, $viewFile);
 
-        extract($data);
+        extract($data, EXTR_SKIP);
 
         ob_start();
         eval('?>' . $compiledView);
@@ -55,6 +57,10 @@ class View
             }
 
             $compiledLayout = self::compileTemplate('layout:' . $layout, $layoutFile);
+
+            if (self::$layoutData !== []) {
+                extract(self::$layoutData, EXTR_OVERWRITE);
+            }
 
             ob_start();
             eval('?>' . $compiledLayout);
@@ -95,19 +101,24 @@ class View
     /**
      * Define the layout for the view.
      */
-    public static function layout(string $layout): void
+    public static function layout(string $layout, array $data = []): void
     {
-        self::$layout = $layout;
+        self::$layout = self::normalizeViewName($layout);
+        self::$layoutData = $data;
     }
 
     /**
      * Include a partial view immediately.
      */
-    public static function include(string $view): void
+    public static function include(string $view, array $data = []): void
     {
-        $viewFile = base("resources/views/{$view}.php");
+        $viewPath = self::normalizeViewName($view);
+        $viewFile = base("resources/views/{$viewPath}.php");
         if (!file_exists($viewFile)) {
             throw new Exception("View file {$viewFile} not found.");
+        }
+        if ($data !== []) {
+            extract($data, EXTR_SKIP);
         }
         include $viewFile;
     }
@@ -140,7 +151,7 @@ class View
             return;
         }
 
-        $cacheFile = self::getCacheFilePath($view);
+        $cacheFile = self::getCacheFilePath(self::normalizeViewName($view));
         if (file_exists($cacheFile)) {
             unlink($cacheFile);
             if (self::$config['debug']) {
@@ -249,13 +260,32 @@ class View
         $content = str_replace('@{{{', $escapedTriplePlaceholder, $content);
         $content = str_replace('@{{', $escapedDoublePlaceholder, $content);
 
-        $content = preg_replace_callback('/@foreach\s*\((.*?)\)\s*/', fn($matches) => "<?php foreach({$matches[1]}): ?>", $content);
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'foreach',
+            fn(string $arguments) => "<?php foreach ({$arguments}): ?>"
+        );
         $content = str_replace('@endforeach', '<?php endforeach; ?>', $content);
 
-        $content = preg_replace_callback('/@if\s*\((.*?)\)\s*/', fn($matches) => "<?php if({$matches[1]}): ?>", $content);
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'for',
+            fn(string $arguments) => "<?php for ({$arguments}): ?>"
+        );
+        $content = str_replace('@endfor', '<?php endfor; ?>', $content);
+
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'if',
+            fn(string $arguments) => "<?php if ({$arguments}): ?>"
+        );
         $content = str_replace('@endif', '<?php endif; ?>', $content);
 
-        $content = preg_replace_callback('/@elseif\s*\((.*?)\)\s*/', fn($matches) => "<?php elseif({$matches[1]}): ?>", $content);
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'elseif',
+            fn(string $arguments) => "<?php elseif ({$arguments}): ?>"
+        );
         $content = str_replace('@else', '<?php else: ?>', $content);
 
         $content = preg_replace_callback('/{{{(.*?)}}}/', fn($matches) => "<?php echo {$matches[1]}; ?>", $content);
@@ -265,29 +295,72 @@ class View
             $content
         );
 
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'include',
+            fn(string $arguments) => "<?php View::include({$arguments}); ?>"
+        );
 
-        $content = preg_replace_callback('/@include\s*\((.*?)\)\s*/', function ($matches) {
-            $includePath = eval('return ' . $matches[1] . ';');
-            $includePath = base("/views/" . $includePath);
-            if (file_exists($includePath)) {
-                ob_start();
-                include $includePath;
-                return ob_get_clean();
-            }
-            throw new Exception("Included file not found: $includePath");
-        }, $content);
-
-        $content = preg_replace_callback('/@yield\s*\((.*?)\)\s*/', fn($matches) => "<?php echo View::yieldSection({$matches[1]}); ?>", $content);
-        $content = preg_replace_callback('/@layout\s*\((.*?)\)\s*/', fn($matches) => "<?php View::layout({$matches[1]}); ?>", $content);
-        $content = preg_replace_callback('/@section\s*\((.*?)\)\s*/', fn($matches) => "<?php View::startSection({$matches[1]}); ?>", $content);
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'yield',
+            fn(string $arguments) => "<?php echo View::yieldSection({$arguments}); ?>"
+        );
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'layout',
+            fn(string $arguments) => "<?php View::layout({$arguments}); ?>"
+        );
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'section',
+            fn(string $arguments) => "<?php View::startSection({$arguments}); ?>"
+        );
         $content = str_replace('@endsection', '<?php View::endSection(); ?>', $content);
 
-        $content = preg_replace_callback('/@dd\s*\((.*?)\)\s*/', fn($matches) => "<?php dd({$matches[1]}); ?>", $content);
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'dd',
+            fn(string $arguments) => "<?php dd({$arguments}); ?>"
+        );
+
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'php',
+            function (string $arguments): string {
+                if ($arguments === '' || substr($arguments, -1) !== ';') {
+                    $arguments .= ';';
+                }
+
+                return "<?php {$arguments} ?>";
+            }
+        );
+
+        $content = preg_replace('/(?<!\\w)@php(?!\s*\()/m', '<?php', $content);
+        $content = preg_replace('/(?<!\\w)@endphp(?!\\w)/m', '?>', $content);
 
         $content = str_replace($escapedTriplePlaceholder, '{{{', $content);
         $content = str_replace($escapedDoublePlaceholder, '{{', $content);
 
         return $content;
+    }
+
+    private static function replaceDirectiveWithArguments(string $content, string $directive, callable $handler): string
+    {
+        $pattern = '/@' . preg_quote($directive, '/') . '\s*(\((?:[^()]+|(?1))*\))/m';
+
+        return preg_replace_callback($pattern, function (array $matches) use ($handler) {
+            $arguments = substr($matches[1], 1, -1);
+
+            return $handler(trim($arguments));
+        }, $content);
+    }
+
+    private static function normalizeViewName(string $view): string
+    {
+        $normalized = str_replace('.', '/', trim($view));
+
+        return trim($normalized, '/');
     }
 
     /**
@@ -298,5 +371,6 @@ class View
         self::$sections = [];
         self::$currentSection = null;
         self::$layout = null;
+        self::$layoutData = [];
     }
 }

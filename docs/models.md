@@ -1,8 +1,6 @@
 # Models
 
-The base `Zero\Lib\Model` class brings an active-record style API on top of the DBML query builder. Extend it inside `App\Models` to describe your domain objects and interact with the database using expressive, fluent methods.
-
-## Defining a Model
+`Zero\Lib\Model` provides a lightweight active-record layer on top of DBML. Extend it inside `App\Models` to describe your tables, hydrate records into rich objects, and define relationships between entities.
 
 ```php
 namespace App\Models;
@@ -11,122 +9,95 @@ use Zero\Lib\Model;
 
 class User extends Model
 {
-    protected array $fillable = ['name', 'email', 'password'];
+    protected array $fillable = ['name', 'email'];
 }
 ```
 
-- The default table name is derived from the class (`User` → `users`). Override the `$table` property for custom names.
-- The default primary key is `id`. Change `$primaryKey` if your schema differs.
-- Timestamps (`created_at`, `updated_at`) are managed automatically; set `protected bool $timestamps = false;` to disable.
-- Opt into soft deletes per model by adding `protected bool $softDeletes = true;` and including a nullable `deleted_at` column in the table schema.
+## Table & Key Configuration
 
-## Querying
+Models infer table and key information from the class name, but you can override any piece:
 
-Models expose a fluent query builder that hydrates results back into model instances:
+- `protected ?string $table` – set manually when the pluralised class name does not match your table.
+- `protected string $primaryKey = 'id'` – customise the primary key column.
+- `protected bool $incrementing = true` – disable when using non-incrementing identifiers.
+- `protected bool $usesUuid = true` / `protected ?string $uuidColumn` – generate a v4 UUID automatically on insert.
+
+## Mass Assignment & Attributes
+
+- `protected array $fillable = []` – whitelist of attributes accepted by `fill()`/`create()`. Leave empty to allow all attributes.
+- `fill(array $attributes)` honours the whitelist, `forceFill()` bypasses it.
+- `getAttribute()`, `hasAttribute()`, and magic accessors (`$user->name`) expose attributes and loaded relations.
+- Convert models to arrays or JSON via `toArray()` / `jsonSerialize()`.
+
+Dirty tracking happens automatically: `isDirty()` checks if any attribute changed compared to the original snapshot, and `getDirty()` (from the trait) lists the mutated fields.
+
+## Timestamps & Soft Deletes
+
+- `protected bool $timestamps = true` keeps `created_at` / `updated_at` (customise names with `$createdAtColumn` / `$updatedAtColumn`).
+- Set `protected bool $softDeletes = true` and ensure a nullable `deleted_at` column exists. Helpers:
+  - `trashed()` – has the model been soft deleted?
+  - `restore()` / `forceDelete()` – undo or bypass soft deletes.
+  - Query builder scopes: `withTrashed()`, `onlyTrashed()`, `withoutTrashed()`.
+
+## Querying Models
+
+`Model::query()` returns a `ModelQuery` wrapper around DBML. Core entry points:
 
 ```php
-$users = User::query()
-    ->where('active', 1)
-    ->orderBy('created_at', 'desc')
-    ->limit(10)
-    ->get(); // returns an array of User models
+$active = User::query()
+    ->where('status', 'active')
+    ->orderByDesc('created_at')
+    ->get();
 
-$user = User::find(5); // returns null if not found
+$john = User::find(42);
+$all  = User::all();
+$recentPage = User::paginate(20, page: 1);
+```
 
-// Eager load relationships (including nested relations)
-$users = User::with(['posts' => function ($query) {
-        $query->where('published', true);
-    }, 'posts.comments'])
+The builder supports the full DBML API (`where`, `whereAny`, `whereAnyLike`, `when`, `whereExists`, joins, aggregates, etc.). Refer to the [DBML guide](dbml.md) for the comprehensive query surface.
+
+### Eager Loading & Relationship Filters
+
+```php
+$users = User::with(['posts', 'posts.comments'])
+    ->withCount('posts')
+    ->whereHas('posts', fn ($query) => $query->where('published', true))
     ->orderBy('name')
     ->get();
 
-// Append relation counts alongside models
-$authors = User::withCount('posts')->get();
-foreach ($authors as $author) {
-    echo $author->name . ' has ' . $author->posts_count . ' posts';
-}
-
-// You can chain both helpers together
-$users = User::with('roles')->withCount(['roles' => 'roles_total'])->get();
-echo $users[0]->roles_total; // hydrated count alias
-```
-
-Use `toBase()` to access the underlying DBML builder when you need low-level control (e.g., custom aggregates).
-
-### Filtering by Relationships
-
-Reach for `whereHas()` and `whereDoesntHave()` when you need to constrain a model query based on related records. The API mirrors Eloquent and accepts nested relation paths as well as optional callbacks to add additional constraints.
-
-```php
-use Zero\Lib\Model\ModelQuery;
-
-// Users who have at least one published post
-$authors = User::query()
-    ->whereHas('posts', function (ModelQuery $query) {
-        $query->where('published', true);
-    })
-    ->get();
-
-// Users without any posts at all
 $lurkers = User::query()->whereDoesntHave('posts')->get();
-
-// Nested relations: authors with a post that has a 5-star review
-$topRated = User::query()
-    ->whereHas('posts.reviews', function (ModelQuery $query) {
-        $query->where('rating', '>=', 5);
-    })
-    ->get();
-
-// OR variants are available as well
-$featured = User::query()
-    ->whereHas('posts', fn ($q) => $q->where('featured', true))
-    ->orWhereHas('roles', fn ($q) => $q->where('name', 'editor'))
-    ->get();
 ```
 
-Callbacks receive the underlying `ModelQuery` instance, so any of the fluent builder methods (including `with`, `withCount`, `orderBy`, etc.) are available inside. When filtering nested relations, required parameters are automatically enforced—missing route parameters will throw an exception to help you spot mistakes early.
+`with()`, `withCount()`, `whereHas()` / `whereDoesntHave()` (and their `or...` variants) mirror Eloquent style APIs while delegating to DBML under the hood.
 
-### Pagination
+### Dropping Down to DBML
 
-```php
-$paginator = User::paginate(20, $page);
+Need plain arrays or custom SQL? Use `toBase()` to obtain the underlying DBML builder, or call `toSql()` / `getBindings()` on `ModelQuery` to inspect generated SQL.
 
-foreach ($paginator->items() as $user) {
-    // $user is a User model instance
-}
-
-$simple = User::simplePaginate(20, $page);
-```
-
-`paginate()` issues an additional count query to compute totals. `simplePaginate()` skips the count for performance-sensitive listings.
-
-## Creating & Persisting
+## Creating, Updating & Deleting
 
 ```php
 $user = User::create([
     'name' => 'Ada Lovelace',
-    'email' => 'ada@example.com',
+    'email' => 'dev@zerophp.com',
 ]);
 
-$user->password = password_hash('secret', PASSWORD_BCRYPT);
-$user->save();
+$user->update(['name' => 'Augusta Ada']);
+$user->delete();          // respects soft deletes if enabled
+$user->forceDelete();     // always removes the record
+$user->restore();         // bring back a soft-deleted record
 ```
 
-The base model tracks dirty attributes, updating only the fields that changed. Timestamp columns are refreshed automatically on save.
+`save()` persists the current state (insert or update). `refresh()` reloads the model from the database and resets dirty tracking.
 
-## Defining Relationships
+## Relationships
 
-The model layer ships with lightweight relationship helpers inspired by Eloquent.
-
-- `hasOne(Related::class, $foreignKey = null, $localKey = null)`
-- `hasMany(Related::class, $foreignKey = null, $localKey = null)`
-- `belongsTo(Related::class, $foreignKey = null, $ownerKey = null)`
-- `belongsToMany(Related::class, $pivotTable = null, $foreignPivotKey = null, $relatedPivotKey = null, $parentKey = null, $relatedKey = null)`
+Relationship helpers live on the model base class and yield `Relation` objects with fluent APIs.
 
 ```php
 class Post extends Model
 {
-    public function author()
+    protected function author(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
@@ -134,148 +105,54 @@ class Post extends Model
 
 class User extends Model
 {
-    public function posts()
+    protected function posts(): HasMany
     {
         return $this->hasMany(Post::class);
     }
-}
 
-$posts = User::find(1)?->posts;   // Array of Post models
-$author = Post::find(5)?->author; // Single User model or null
+    protected function roles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class)->withTimestamps();
+    }
+}
 ```
 
-Relationship results are lazy-loaded and cached the first time you access them. Use `$model->relationLoaded('posts')` to check the cache, or `$model->setRelation('posts', $collection)` when eager loading manually.
+Supported relations:
 
-### Many-to-Many
+- `hasOne(Related::class, $foreignKey = null, $localKey = null)`
+- `hasMany(Related::class, $foreignKey = null, $localKey = null)`
+- `belongsTo(Related::class, $foreignKey = null, $ownerKey = null)`
+- `belongsToMany(Related::class, $pivotTable = null, $foreignPivotKey = null, $relatedPivotKey = null, $parentKey = null, $relatedKey = null)`
+
+Many-to-many relations expose pivot helpers:
 
 ```php
-class User extends Model
-{
-    public function roles()
-    {
-        return $this->belongsToMany(Role::class);
-    }
-}
-
-class Role extends Model
-{
-    public function users()
-    {
-        return $this->belongsToMany(User::class);
-    }
-}
-
 $user = User::find(1);
-$user?->roles()->attach(3);            // insert into role_users
-$user?->roles()->sync([3, 5]);         // keep only roles 3 and 5
-$user?->roles()->detach(5);            // remove one role
-
-// Add pivot metadata with timestamps
-$user?->roles()->withTimestamps()->attach(7, ['granted_by' => 2]);
+$user?->roles()->attach([3, 5]);
+$user?->roles()->sync([3 => ['granted_by' => 2]]);
+$user?->roles()->detach(5);
 ```
 
-By default the framework looks for a pivot table named after the two related models using singular table names in alphabetical order with the final segment pluralised (e.g. `Role` + `User` ⇒ `role_users`). Pass the table name explicitly to `belongsToMany()` when your schema deviates from that convention. The relation proxies query builder methods, so you can chain constraints (`$user->roles()->where('roles.active', 1)->getResults()`) before fetching results.
-
-Calling `withTimestamps()` instructs the relation to maintain `created_at` / `updated_at` (or custom column names you provide) on the pivot entries during `attach` and `sync` operations.
-
-### UUID Primary Keys
-
-Set the following properties on your model to generate a v4 UUID automatically when inserting new records:
-
-```php
-class ApiToken extends Model
-{
-    protected bool $incrementing = false;
-    protected bool $usesUuid = true;
-    protected ?string $uuidColumn = 'id'; // optional, defaults to the primary key
-}
-```
-
-Make sure your migration creates a UUID column (see [UUID Columns](#uuid-columns)) and stores it as the primary key. The framework generates RFC 4122 compliant strings using PHP's `random_bytes`, so no external dependency is required.
+Relations cache their results; use `relationLoaded()`, `getRelation()`, and `setRelation()` for manual management during custom eager loading.
 
 ## Lifecycle Hooks
 
-Override these optional methods on your models to run domain logic around persistence events:
+Override any of these optional methods on your model to run domain logic around persistence events:
 
 - `beforeCreate` / `afterCreate`
 - `beforeUpdate` / `afterUpdate`
-- `beforeSave` / `afterSave` (fire for both create and update flows)
+- `beforeSave` / `afterSave`
 - `beforeDelete` / `afterDelete`
+- `beforeRestore` / `afterRestore`
 
-Each hook receives the model instance via `$this`, so you can mutate attributes, enforce validation, dispatch events, or abort by throwing an exception before the write occurs. Hooks only fire when you override them—base models with no overrides incur no runtime overhead.
+Hooks are no-ops on the base class; declaring them in your model triggers them automatically when the corresponding action runs.
 
-## Soft Deletes
+## Summary
 
-Soft deletes allow you to hide records without removing them permanently. Enable the behaviour on a model by setting the `$softDeletes` flag:
+- Extend `Zero\Lib\Model` for active-record style access with minimal magic.
+- Use `Model::query()` for fluent DBML querying and lean on `with`, `withCount`, `whereHas`, and soft-delete scopes as needed.
+- Manage attributes via `fillable`, timestamps, and optional UUID generation.
+- Define relationships with `hasOne`, `hasMany`, `belongsTo`, and `belongsToMany`, including pivot helpers.
+- Leverage lifecycle hooks and `refresh()` to keep long-lived objects in sync.
 
-```php
-class Post extends Model
-{
-    protected bool $softDeletes = true;
-}
-```
-
-Add a nullable `deleted_at` column to your migration so the framework can track the deletion timestamp:
-
-```php
-Schema::create('posts', function (Blueprint $table) {
-    $table->id();
-    $table->string('title');
-    $table->timestamps();
-    $table->softDeletes(); // creates a nullable deleted_at column
-});
-```
-
-Once enabled, calls to `$model->delete()` (or query deletes such as `Post::query()->where(...)->delete()`) update `deleted_at` instead of issuing a hard delete. The base model also exposes helpers:
-
-- `$model->trashed()` reports whether the instance has been soft deleted.
-- `$model->restore()` clears `deleted_at` and makes the record active again.
-- `$model->forceDelete()` bypasses soft deletes and removes the row permanently.
-
-The query builder automatically excludes soft-deleted rows. Use the following scopes when you need different visibility:
-
-```php
-Post::query()->withTrashed()->get();   // includes soft-deleted posts
-Post::query()->onlyTrashed()->get();   // returns only soft-deleted posts
-Post::query()->withoutTrashed()->get(); // explicit default scope
-
-// Permanently remove matching records
-Post::query()->where('slug', 'obsolete')->forceDelete();
-```
-
-Relationship queries inherit the same behaviour; call `withTrashed()` on the relation query when you need to include soft-deleted children.
-
-## UUID Columns
-
-The schema builder ships two helpers:
-
-```php
-Schema::create('api_tokens', function (Blueprint $table) {
-    $table->uuidPrimary();
-    $table->foreignId('user_id')->constrained();
-    $table->string('name');
-    $table->timestamps();
-});
-
-Schema::table('users', function (Blueprint $table) {
-    $table->uuid('external_id')->unique();
-});
-```
-
-`uuid()` creates a `CHAR(36)` column, while `uuidPrimary()` marks it as the table's primary key.
-
-## Deleting & Refreshing
-
-```php
-$user = User::find(5);
-
-if ($user) {
-    $user->delete();
-}
-```
-
-Call `$model->refresh()` to reload attributes from the database after performing external updates.
-
-## Accessing Attributes
-
-Models behave like simple data objects—use property access, `toArray()`, or `json_encode()` thanks to the `JsonSerializable` interface. Mass assignment honours the `$fillable` whitelist, while `forceFill()` bypasses it for system-level operations.
+The model layer stays deliberately small—if you need something more bespoke, drop to DBML or write repository classes that combine both layers.

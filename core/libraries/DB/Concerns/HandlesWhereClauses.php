@@ -55,6 +55,48 @@ trait HandlesWhereClauses
         return $this->where($column, $operator, $value, 'OR');
     }
 
+    /**
+     * Constrain the query where any of the given columns meet the condition.
+     */
+    public function whereAny(mixed ...$arguments): self
+    {
+        [$columns, $value, $boolean, $operator] = $this->parseWhereAnyArguments($arguments, 'AND', true);
+
+        return $this->applyWhereAny($columns, $value, $boolean, $operator);
+    }
+
+    public function orWhereAny(mixed ...$arguments): self
+    {
+        [$columns, $value, $boolean, $operator] = $this->parseWhereAnyArguments($arguments, 'OR', true);
+
+        return $this->applyWhereAny($columns, $value, $boolean, $operator);
+    }
+
+    /**
+     * Constrain the query with a LIKE comparison against any of the columns.
+     */
+    public function whereAnyLike(mixed ...$arguments): self
+    {
+        $wildcard = $this->extractLikeWildcard($arguments);
+
+        [$columns, $value, $boolean, $operator] = $this->parseWhereAnyArguments($arguments, 'AND', false);
+
+        $pattern = $this->prepareLikeWildcard((string) $value, $wildcard);
+
+        return $this->applyWhereAny($columns, $pattern, $boolean, 'LIKE');
+    }
+
+    public function orWhereAnyLike(mixed ...$arguments): self
+    {
+        $wildcard = $this->extractLikeWildcard($arguments);
+
+        [$columns, $value, $boolean, $operator] = $this->parseWhereAnyArguments($arguments, 'OR', false);
+
+        $pattern = $this->prepareLikeWildcard((string) $value, $wildcard);
+
+        return $this->applyWhereAny($columns, $pattern, $boolean, 'LIKE');
+    }
+
     public function whereNot(string $column, mixed $value, string $boolean = 'AND'): self
     {
         return $this->where($column, '!=', $value, $boolean);
@@ -237,6 +279,7 @@ trait HandlesWhereClauses
     {
         return $this->addWhereExists($query, 'OR', true);
     }
+
     protected function whereNested(Closure $callback, string $boolean): self
     {
         $nested = static::table($this->table . ($this->alias ? ' as ' . $this->alias : ''));
@@ -256,6 +299,7 @@ trait HandlesWhereClauses
 
         return $this;
     }
+
     protected function addWhereExists(QueryBuilder $query, string $boolean, bool $not): self
     {
         $clone = clone $query;
@@ -270,5 +314,138 @@ trait HandlesWhereClauses
         $this->addBinding($clone->getBindings());
 
         return $this;
+    }
+
+    /**
+     * Normalize whereAny arguments and return [columns, value, boolean, operator].
+     */
+    private function parseWhereAnyArguments(array $arguments, string $defaultBoolean, bool $allowOperator): array
+    {
+        if (count($arguments) < 2) {
+            throw new InvalidArgumentException('whereAny requires at least one column and a value.');
+        }
+
+        $boolean = $defaultBoolean;
+        $operator = $allowOperator ? '=' : null;
+
+        $candidate = end($arguments);
+        if (is_string($candidate) && $this->isBooleanKeyword($candidate)) {
+            $boolean = strtoupper(array_pop($arguments));
+        }
+
+        if (count($arguments) < 2) {
+            throw new InvalidArgumentException('whereAny requires at least one column and a value.');
+        }
+
+        $value = array_pop($arguments);
+
+        if ($allowOperator && !empty($arguments)) {
+            $candidate = end($arguments);
+            if (is_string($candidate) && $this->isComparisonOperator($candidate)) {
+                $operator = strtoupper(array_pop($arguments));
+            }
+        }
+
+        if (count($arguments) === 1 && is_array($arguments[0])) {
+            $columns = $arguments[0];
+        } else {
+            $columns = $arguments;
+        }
+
+        $columns = $this->normalizeColumnList($columns);
+
+        if (empty($columns)) {
+            throw new InvalidArgumentException('whereAny requires at least one column.');
+        }
+
+        return [$columns, $value, $boolean, $operator];
+    }
+
+    private function applyWhereAny(array $columns, mixed $value, string $boolean, ?string $operator): self
+    {
+        $operator = $operator ?? '=';
+
+        if (count($columns) === 1) {
+            return $this->where($columns[0], $operator, $value, $boolean);
+        }
+
+        return $this->where(function (QueryBuilder $query) use ($columns, $operator, $value) {
+            foreach ($columns as $index => $column) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+                $query->{$method}($column, $operator, $value);
+            }
+        }, null, null, $boolean);
+    }
+
+    private function normalizeColumnList(array $columns): array
+    {
+        $normalized = [];
+
+        foreach ($columns as $column) {
+            if (!is_string($column)) {
+                continue;
+            }
+
+            $column = trim($column);
+
+            if ($column === '') {
+                continue;
+            }
+
+            $normalized[] = $column;
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
+    private function prepareLikeWildcard(string $value, string $wildcard): string
+    {
+        $wildcard = strtolower($wildcard);
+
+        switch ($wildcard) {
+            case 'left':
+                return '%' . $value;
+            case 'right':
+                return $value . '%';
+            case 'none':
+                return $value;
+            default:
+                return '%' . $value . '%';
+        }
+    }
+
+    private function extractLikeWildcard(array &$arguments): string
+    {
+        $wildcard = 'both';
+
+        if (!empty($arguments)) {
+            $candidate = end($arguments);
+            if (is_string($candidate) && $this->isLikeWildcardKeyword($candidate)) {
+                $wildcard = strtolower(array_pop($arguments));
+            }
+        }
+
+        return $wildcard;
+    }
+
+    private function isBooleanKeyword(string $value): bool
+    {
+        $value = strtoupper($value);
+
+        return $value === 'AND' || $value === 'OR';
+    }
+
+    private function isComparisonOperator(string $value): bool
+    {
+        $value = strtoupper($value);
+
+        return in_array($value, ['=', '!=', '<>', '<', '>', '<=', '>=', 'LIKE', 'NOT LIKE', 'ILIKE', 'NOT ILIKE'], true);
+    }
+
+    private function isLikeWildcardKeyword(string $value): bool
+    {
+        $value = strtolower($value);
+
+        return in_array($value, ['both', 'left', 'right', 'none'], true);
     }
 }

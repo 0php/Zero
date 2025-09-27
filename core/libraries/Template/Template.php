@@ -28,16 +28,82 @@ class Template
     }
 
     /**
-     * Render a template replacing {{ placeholders }} with bound data.
+     * Render a template replacing `{{ placeholder }}` tokens with bound data.
      */
     public static function render(string $name, array $data = []): string
     {
         $template = self::load($name);
 
-        return preg_replace_callback('/{{\s*(.+?)\s*}}/', function ($matches) use ($data) {
-            $key = $matches[1];
-
-            return array_key_exists($key, $data) ? (string) $data[$key] : $matches[0];
+        $template = preg_replace_callback('/{{{(.*?)}}}/s', function (array $matches) use ($data) {
+            return self::replacePlaceholder($matches[0], $matches[1], $data);
         }, $template);
+
+        $template = preg_replace_callback('/{!!\s*(.+?)\s*!!}/s', function (array $matches) use ($data) {
+            return self::replacePlaceholder($matches[0], $matches[1], $data);
+        }, $template);
+
+        $template = preg_replace_callback('/{{\s*(.+?)\s*}}/', function (array $matches) use ($data) {
+            return self::replacePlaceholder($matches[0], $matches[1], $data);
+        }, $template);
+
+        return $template;
+    }
+
+    private static function replacePlaceholder(string $placeholder, string $expression, array $data): string
+    {
+        $found = false;
+        $value = self::extractValue($data, trim($expression), $found);
+
+        if (! $found) {
+            return $placeholder;
+        }
+
+        if (is_object($value)) {
+            if (method_exists($value, '__toString')) {
+                $value = (string) $value;
+            } else {
+                return $placeholder;
+            }
+        }
+
+        if (is_array($value)) {
+            return $placeholder;
+        }
+
+        return (string) $value;
+    }
+
+    private static function extractValue(array $data, string $expression, bool &$found): mixed
+    {
+        $found = false;
+
+        if ($expression === '') {
+            return '';
+        }
+
+        if (! preg_match('/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/', $expression)) {
+            return null;
+        }
+
+        $segments = explode('.', $expression);
+        $value = $data;
+
+        foreach ($segments as $segment) {
+            if (is_array($value) && array_key_exists($segment, $value)) {
+                $value = $value[$segment];
+                continue;
+            }
+
+            if (is_object($value) && isset($value->{$segment})) {
+                $value = $value->{$segment};
+                continue;
+            }
+
+            return null;
+        }
+
+        $found = true;
+
+        return $value;
     }
 }

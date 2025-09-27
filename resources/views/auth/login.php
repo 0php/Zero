@@ -1,21 +1,16 @@
-<?php
+@layout('layouts.app', ['title' => 'Sign In'])
 
-use Zero\Lib\View;
-
-View::layout('layouts/app');
-
-View::startSection('content');
-?>
+@section('content')
 <div class="container py-5" style="max-width: 480px;">
     <h1 class="mb-4 text-center">Sign In</h1>
 
-    <?php if (!empty($status ?? '')): ?>
+    @if (!empty($status ?? ''))
         <div class="alert alert-success" role="alert">
             {{ $status ?? '' }}
         </div>
-    <?php endif; ?>
+    @endif
 
-    <form method="POST" action="<?= route('auth.login.attempt'); ?>" class="card shadow-sm p-4">
+    <form method="POST" action="{{ route('auth.login.attempt') }}" class="card shadow-sm p-4">
         <div class="mb-3">
             <label for="email" class="form-label">Email</label>
             <input
@@ -26,11 +21,11 @@ View::startSection('content');
                 value="{{ $old['email'] ?? '' }}"
                 required
             >
-            <?php if (isset($errors['email'])): ?>
+            @if (isset($errors['email']))
                 <div class="invalid-feedback">
                     {{ $errors['email'] ?? '' }}
                 </div>
-            <?php endif; ?>
+            @endif
         </div>
 
         <div class="mb-3">
@@ -42,19 +37,19 @@ View::startSection('content');
                 name="password"
                 required
             >
-            <?php if (isset($errors['password'])): ?>
+            @if (isset($errors['password']))
                 <div class="invalid-feedback">
                     {{ $errors['password'] ?? '' }}
                 </div>
-            <?php endif; ?>
+            @endif
         </div>
 
         <div class="d-grid gap-2">
             <button type="submit" class="btn btn-primary">Log In</button>
-            <a href="<?= route('auth.password.forgot'); ?>" class="btn btn-link">Forgot password?</a>
-            <a href="<?= route('auth.register.show'); ?>" class="btn btn-link">Create an account</a>
-            <a href="<?= route('home'); ?>" class="btn btn-link">Back to home</a>
+            <a href="{{ route('auth.password.forgot') }}" class="btn btn-link">Forgot password?</a>
+            <a href="{{ route('auth.register.show') }}" class="btn btn-link">Create an account</a>
+            <a href="{{ route('home') }}" class="btn btn-link">Back to home</a>
         </div>
     </form>
 </div>
-<?php View::endSection(); ?>
+@endsection

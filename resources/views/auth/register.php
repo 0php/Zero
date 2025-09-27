@@ -1,21 +1,16 @@
-<?php
+@layout('layouts.app', ['title' => 'Register'])
 
-use Zero\Lib\View;
-
-View::layout('layouts/app');
-
-View::startSection('content');
-?>
+@section('content')
 <div class="container py-5" style="max-width: 520px;">
     <h1 class="mb-4 text-center">Create an Account</h1>
 
-    <?php if (!empty($status ?? '')): ?>
+    @if (!empty($status ?? ''))
         <div class="alert alert-success" role="alert">
             {{ $status ?? '' }}
         </div>
-    <?php endif; ?>
+    @endif
 
-    <form method="POST" action="<?= route('auth.register.store'); ?>" class="card shadow-sm p-4">
+    <form method="POST" action="{{ route('auth.register.store') }}" class="card shadow-sm p-4">
         <div class="mb-3">
             <label for="name" class="form-label">Name</label>
             <input
@@ -26,11 +21,11 @@ View::startSection('content');
                 value="{{ $old['name'] ?? '' }}"
                 required
             >
-            <?php if (isset($errors['name'])): ?>
+            @if (isset($errors['name']))
                 <div class="invalid-feedback">
                     {{ $errors['name'] ?? '' }}
                 </div>
-            <?php endif; ?>
+            @endif
         </div>
 
         <div class="mb-3">
@@ -43,11 +38,11 @@ View::startSection('content');
                 value="{{ $old['email'] ?? '' }}"
                 required
             >
-            <?php if (isset($errors['email'])): ?>
+            @if (isset($errors['email']))
                 <div class="invalid-feedback">
                     {{ $errors['email'] ?? '' }}
                 </div>
-            <?php endif; ?>
+            @endif
         </div>
 
         <div class="mb-3">
@@ -59,11 +54,11 @@ View::startSection('content');
                 name="password"
                 required
             >
-            <?php if (isset($errors['password'])): ?>
+            @if (isset($errors['password']))
                 <div class="invalid-feedback">
                     {{ $errors['password'] ?? '' }}
                 </div>
-            <?php endif; ?>
+            @endif
         </div>
 
         <div class="mb-3">
@@ -75,17 +70,17 @@ View::startSection('content');
                 name="password_confirmation"
                 required
             >
-            <?php if (isset($errors['password_confirmation'])): ?>
+            @if (isset($errors['password_confirmation']))
                 <div class="invalid-feedback">
                     {{ $errors['password_confirmation'] ?? '' }}
                 </div>
-            <?php endif; ?>
+            @endif
         </div>
 
         <div class="d-grid gap-2">
             <button type="submit" class="btn btn-primary">Register</button>
-            <a href="<?= route('auth.login.show'); ?>" class="btn btn-link">Already registered? Sign in</a>
+            <a href="{{ route('auth.login.show') }}" class="btn btn-link">Already registered? Sign in</a>
         </div>
     </form>
 </div>
-<?php View::endSection(); ?>
+@endsection

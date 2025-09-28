@@ -52,7 +52,7 @@ Get started with Zero Framework using this one-liner (replace `my-project` with 
 
 ### Mac and Linux
 ```bash
-curl -L -o main.zip https://github.com/0php/Zero/archive/refs/heads/main.zip \
+curl -L -o main.zip https://zerophp.com/get/latest.zip \
 && unzip -q main.zip \
 && rm main.zip \
 && mv Zero-main my-project \
@@ -64,7 +64,7 @@ curl -L -o main.zip https://github.com/0php/Zero/archive/refs/heads/main.zip \
 
 ### Windows
 ```bash
-Invoke-WebRequest -Uri "https://github.com/0php/Zero/archive/refs/heads/main.zip" -OutFile "main.zip"; 
+Invoke-WebRequest -Uri "https://zerophp.com/get/latest.zip" -OutFile "main.zip"; 
 Expand-Archive -Path "main.zip" -DestinationPath "." -Force; 
 Remove-Item "main.zip"; 
 Rename-Item "Zero-main" "my-project"; 

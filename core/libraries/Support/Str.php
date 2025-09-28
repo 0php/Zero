@@ -37,9 +37,16 @@ final class Str
         return str_replace('_', '-', $value);
     }
 
-    public static function slug(string $value): string
+    public static function slug(string $value, string $separator = '-'): string
     {
-        return self::kebab($value);
+        $separator = $separator === '' ? '-' : $separator;
+
+        $value = self::ascii($value, '');
+        $value = strtolower($value);
+        $value = preg_replace('/[^a-z0-9\s' . preg_quote($separator, '/') . ']+/u', '', $value);
+        $value = preg_replace('/[' . preg_quote($separator, '/') . '\s]+/u', $separator, $value);
+
+        return trim($value, $separator);
     }
 
     public static function camel(string $value): string
@@ -105,5 +112,285 @@ final class Str
             substr($hex, 16, 4),
             substr($hex, 20, 12),
         ]);
+    }
+
+    public static function random(int $length = 16, ?string $alphabet = null): string
+    {
+        if ($length < 1) {
+            throw new \InvalidArgumentException('Length must be greater than zero.');
+        }
+
+        $alphabet ??= 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        $alphabetLength = strlen($alphabet);
+
+        if ($alphabetLength === 0) {
+            throw new \InvalidArgumentException('Alphabet must not be empty.');
+        }
+
+        $result = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $index = random_int(0, $alphabetLength - 1);
+            $result .= $alphabet[$index];
+        }
+
+        return $result;
+    }
+
+    public static function length(string $value, ?string $encoding = null): int
+    {
+        return $encoding === null
+            ? mb_strlen($value)
+            : mb_strlen($value, $encoding);
+    }
+
+    public static function substr(string $value, int $start, ?int $length = null, ?string $encoding = null): string
+    {
+        return $encoding === null
+            ? ($length === null ? mb_substr($value, $start) : mb_substr($value, $start, $length))
+            : ($length === null ? mb_substr($value, $start, null, $encoding) : mb_substr($value, $start, $length, $encoding));
+    }
+
+    public static function words(string $value, int $words, string $end = '...'): string
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return '';
+        }
+
+        $segments = preg_split('/\s+/u', $value, -1, PREG_SPLIT_NO_EMPTY);
+
+        if ($segments === false || count($segments) <= $words) {
+            return $value;
+        }
+
+        $limited = array_slice($segments, 0, max($words, 0));
+
+        return implode(' ', $limited) . $end;
+    }
+
+    public static function limitWords(string $value, int $words, string $end = '...'): string
+    {
+        return self::words($value, $words, $end);
+    }
+
+    public static function after(string $subject, string $search): string
+    {
+        if ($search === '') {
+            return $subject;
+        }
+
+        $position = mb_strpos($subject, $search);
+
+        if ($position === false) {
+            return $subject;
+        }
+
+        return mb_substr($subject, $position + mb_strlen($search));
+    }
+
+    public static function before(string $subject, string $search): string
+    {
+        if ($search === '') {
+            return $subject;
+        }
+
+        $position = mb_strpos($subject, $search);
+
+        if ($position === false) {
+            return $subject;
+        }
+
+        return mb_substr($subject, 0, $position);
+    }
+
+    public static function between(string $subject, string $from, string $to): string
+    {
+        if ($from === '' || $to === '') {
+            return '';
+        }
+
+        $result = self::after($subject, $from);
+        $result = self::before($result, $to);
+
+        return $result;
+    }
+
+    public static function replaceFirst(string $search, string $replace, string $subject): string
+    {
+        if ($search === '') {
+            return $subject;
+        }
+
+        $position = mb_strpos($subject, $search);
+
+        if ($position === false) {
+            return $subject;
+        }
+
+        return mb_substr($subject, 0, $position)
+            . $replace
+            . mb_substr($subject, $position + mb_strlen($search));
+    }
+
+    public static function replaceLast(string $search, string $replace, string $subject): string
+    {
+        if ($search === '') {
+            return $subject;
+        }
+
+        $position = mb_strrpos($subject, $search);
+
+        if ($position === false) {
+            return $subject;
+        }
+
+        return mb_substr($subject, 0, $position)
+            . $replace
+            . mb_substr($subject, $position + mb_strlen($search));
+    }
+
+    public static function swap(array $map, string $subject): string
+    {
+        return strtr($subject, $map);
+    }
+
+    public static function containsAll(string $haystack, iterable $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if (!self::contains($haystack, (string) $needle)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static function containsAny(string $haystack, iterable $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if (self::contains($haystack, (string) $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function startsWithAny(string $haystack, iterable $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if (self::startsWith($haystack, (string) $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function endsWithAny(string $haystack, iterable $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if (self::endsWith($haystack, (string) $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function ascii(string $value, string $fallback = '?'): string
+    {
+        $transliterated = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+
+        if ($transliterated === false) {
+            return preg_replace('/[^\x00-\x7F]/u', $fallback, $value) ?? $value;
+        }
+
+        $clean = preg_replace('/[^\x00-\x7F]/', $fallback, $transliterated);
+
+        return $clean ?? $transliterated;
+    }
+
+    public static function padLeft(string $value, int $length, string $pad = ' '): string
+    {
+        return self::pad($value, $length, $pad, 'left');
+    }
+
+    public static function padRight(string $value, int $length, string $pad = ' '): string
+    {
+        return self::pad($value, $length, $pad, 'right');
+    }
+
+    public static function padBoth(string $value, int $length, string $pad = ' '): string
+    {
+        return self::pad($value, $length, $pad, 'both');
+    }
+
+    public static function repeat(string $value, int $times): string
+    {
+        if ($times < 0) {
+            throw new \InvalidArgumentException('Times must be zero or greater.');
+        }
+
+        return str_repeat($value, $times);
+    }
+
+    public static function of(string $value): Stringable
+    {
+        return new Stringable($value);
+    }
+
+    private static function pad(string $value, int $length, string $pad, string $side): string
+    {
+        if ($length <= 0) {
+            return '';
+        }
+
+        $valueLength = mb_strlen($value);
+
+        if ($valueLength >= $length) {
+            return $value;
+        }
+
+        $padLength = $length - $valueLength;
+
+        $pad = $pad === '' ? ' ' : $pad;
+
+        $left = 0;
+        $right = 0;
+
+        switch ($side) {
+            case 'left':
+                $left = $padLength;
+                break;
+            case 'right':
+                $right = $padLength;
+                break;
+            default:
+                $left = intdiv($padLength, 2);
+                $right = $padLength - $left;
+        }
+
+        return self::repeatToLength($pad, $left) . $value . self::repeatToLength($pad, $right);
+    }
+
+    private static function repeatToLength(string $pad, int $length): string
+    {
+        if ($length <= 0) {
+            return '';
+        }
+
+        $padLength = mb_strlen($pad);
+
+        if ($padLength === 0) {
+            return str_repeat(' ', $length);
+        }
+
+        $repeats = (int) ceil($length / $padLength);
+        $result = str_repeat($pad, $repeats);
+
+        return mb_substr($result, 0, $length);
     }
 }

@@ -14,6 +14,7 @@ use Zero\Lib\DB\DBMLExpression;
 use Zero\Lib\Model\Concerns\InteractsWithRelations;
 use Zero\Lib\Model\ModelQuery;
 use Zero\Lib\Support\Paginator;
+use Zero\Lib\Support\Str;
 
 /**
  * Minimalist active-record style model built on top of the DBML query builder.
@@ -478,7 +479,7 @@ class Model implements JsonSerializable
         $current = $this->attributes[$column] ?? null;
 
         if ($current === null || $current === '') {
-            $this->attributes[$column] = $this->newUuid();
+            $this->attributes[$column] = Str::uuid();
         }
     }
 
@@ -529,17 +530,6 @@ class Model implements JsonSerializable
     protected function afterDelete(): void {}
     protected function beforeRestore(): void {}
     protected function afterRestore(): void {}
-
-    protected function newUuid(): string
-    {
-        $bytes = random_bytes(16);
-        $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40);
-        $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80);
-
-        $hex = bin2hex($bytes);
-
-        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split($hex, 4));
-    }
 
     private function fireHook(string $method): void
     {

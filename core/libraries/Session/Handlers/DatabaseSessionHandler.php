@@ -80,21 +80,14 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
         $agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
 
         try {
-            $updated = Database::query(
-                sprintf('UPDATE %s SET payload = ?, last_activity = ?, ip_address = ?, user_agent = ?, updated_at = ? WHERE id = ?', $this->table),
+            // Use INSERT ... ON DUPLICATE KEY UPDATE to handle race conditions
+            // This prevents duplicate key errors when multiple requests try to create the same session
+            Database::query(
+                sprintf('INSERT INTO %s (id, payload, last_activity, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE payload = VALUES(payload), last_activity = VALUES(last_activity), ip_address = VALUES(ip_address), user_agent = VALUES(user_agent), updated_at = VALUES(updated_at)', $this->table),
                 null,
-                [$data, $now, $ip, $agent, $now, $id],
-                'update'
+                [$id, $data, $now, $ip, $agent, $now, $now],
+                'upsert'
             );
-
-            if ((int) $updated === 0) {
-                Database::query(
-                    sprintf('INSERT INTO %s (id, payload, last_activity, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', $this->table),
-                    null,
-                    [$id, $data, $now, $ip, $agent, $now, $now],
-                    'create'
-                );
-            }
 
             return true;
         } catch (\Throwable $e) {

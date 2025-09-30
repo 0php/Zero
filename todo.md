@@ -41,4 +41,3 @@
 ## Mailable
 
 - [ ] Create mailable custom services
-- [ ] Add custom driver like sendgrid etc

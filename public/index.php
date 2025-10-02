@@ -29,4 +29,5 @@ foreach ($helpers as $helper) {
 }
 
 require_once __DIR__ . '/../core/bootstrap/session.php';
+require_once __DIR__ . '/../core/bootstrap/rate_limit.php';
 require_once __DIR__ . '/../core/bootstrap.php';

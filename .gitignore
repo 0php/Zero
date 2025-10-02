@@ -14,3 +14,4 @@ sqlite
 storage/logs
 
 storage/framework/schedule
+storage/cache/rate_limit

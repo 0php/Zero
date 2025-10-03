@@ -163,6 +163,19 @@ class ModelQuery
     }
 
     /**
+     * Update the first matching model or create a new instance with the given values.
+     */
+    public function updateOrCreate(array $attributes, array $values = []): BaseModel
+    {
+        $record = $this->preparedBuilder()->updateOrCreate($attributes, $values);
+
+        /** @var BaseModel $model */
+        $model = $this->hydrateModel($this->newModel($record, true));
+
+        return $model;
+    }
+
+    /**
      * Retrieve a model by its primary key.
      */
     public function find(mixed $id, array|string|DBMLExpression $columns = []): ?BaseModel

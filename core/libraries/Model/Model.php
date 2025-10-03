@@ -189,6 +189,17 @@ class Model implements JsonSerializable
     }
 
     /**
+     * Update the first matching record or create it with the provided values.
+     */
+    public static function updateOrCreate(array $attributes, array $values = []): static
+    {
+        /** @var static $model */
+        $model = static::query()->updateOrCreate($attributes, $values);
+
+        return $model;
+    }
+
+    /**
      * Determine if the model exists in the database.
      */
     public function exists(): bool

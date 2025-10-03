@@ -86,6 +86,12 @@ $user->update(['name' => 'Augusta Ada']);
 $user->delete();          // respects soft deletes if enabled
 $user->forceDelete();     // always removes the record
 $user->restore();         // bring back a soft-deleted record
+
+// Upsert style helper: find by unique key, update or create if missing
+$account = User::updateOrCreate(
+    ['email' => 'dev@zerophp.com'],
+    ['name' => 'Ada Lovelace']
+); // lookup attributes merge with updates; conflicting keys take the new value
 ```
 
 `save()` persists the current state (insert or update). `refresh()` reloads the model from the database and resets dirty tracking.

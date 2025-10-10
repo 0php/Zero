@@ -62,6 +62,20 @@ if (is_dir($dstCore)) {
 }
 copyDirectory($srcCore, $dstCore);
 
+// Copy app/Middlewares directory without deleting existing files
+$srcMiddlewares = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "app" . DIRECTORY_SEPARATOR . "Middlewares";
+$dstMiddlewares = __DIR__ . DIRECTORY_SEPARATOR . "app" . DIRECTORY_SEPARATOR . "Middlewares";
+if (is_dir($srcMiddlewares)) {
+    copyDirectory($srcMiddlewares, $dstMiddlewares);
+}
+
+// Copy config directory without deleting existing files
+$srcConfig = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "config";
+$dstConfig = __DIR__ . DIRECTORY_SEPARATOR . "config";
+if (is_dir($srcConfig)) {
+    copyDirectory($srcConfig, $dstConfig);
+}
+
 // Copy zero file
 $srcZero = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "zero";
 $dstZero = __DIR__ . DIRECTORY_SEPARATOR . "zero";

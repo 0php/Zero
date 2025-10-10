@@ -20,6 +20,12 @@ class Blueprint
     /** @var string[] */
     protected array $indexes = [];
 
+    /** @var string[] */
+    protected array $postCreateStatements = [];
+
+    /** @var string[] */
+    protected array $primaryColumns = [];
+
     protected ?string $charset = null;
     protected ?string $collation = null;
     protected string $driver;
@@ -34,7 +40,12 @@ class Blueprint
 
         $connection = config('database.connection');
         $connectionConfig = config('database.' . $connection) ?? [];
-        $this->driver = (string) ($connectionConfig['driver'] ?? $connection);
+        if (!is_array($connectionConfig)) {
+            $connectionConfig = (array) $connectionConfig;
+        }
+
+        $driver = (string) ($connectionConfig['driver'] ?? $connection);
+        $this->driver = strtolower($driver);
 
         if ($this->driver === 'mysql') {
             $this->charset = $connectionConfig['charset'] ?? null;
@@ -261,7 +272,10 @@ class Blueprint
     /** Mark the given columns as the table primary key. */
     public function primary(string|array $columns, ?string $name = null): self
     {
-        return $this->addIndex('primary', (array) $columns, $name);
+        $columns = (array) $columns;
+        $this->registerPrimaryColumns($columns);
+
+        return $this->addIndex('primary', $columns, $name);
     }
 
     /** Drop a column from the table. */
@@ -320,6 +334,20 @@ class Blueprint
         }
 
         return $this;
+    }
+
+    protected function isSqlite(): bool
+    {
+        return in_array($this->driver, ['sqlite', 'sqlite3'], true);
+    }
+
+    public function registerPrimaryColumns(array $columns): void
+    {
+        foreach ($columns as $column) {
+            if (!in_array($column, $this->primaryColumns, true)) {
+                $this->primaryColumns[] = $column;
+            }
+        }
     }
 
     public function getTable(): string
@@ -388,7 +416,13 @@ class Blueprint
                 }
             }
 
-            return [$statement];
+            $statements = [$statement];
+
+            if (!empty($this->postCreateStatements)) {
+                $statements = array_merge($statements, $this->postCreateStatements);
+            }
+
+            return $statements;
         }
 
         $operations = [];
@@ -419,6 +453,38 @@ class Blueprint
         $columnList = implode(', ', array_map(fn ($column) => '`' . $column . '`', $columns));
 
         $type = strtolower($type);
+
+        if ($type === 'primary') {
+            $this->registerPrimaryColumns($columns);
+        }
+
+        if ($this->isSqlite()) {
+            if ($this->action === 'create') {
+                if ($type === 'primary') {
+                    $this->indexes[] = sprintf('PRIMARY KEY (%s)', $columnList);
+                } elseif ($type === 'unique') {
+                    $this->indexes[] = sprintf('CONSTRAINT `%s` UNIQUE (%s)', $name, $columnList);
+                } else {
+                    $this->postCreateStatements[] = sprintf(
+                        'CREATE INDEX `%s` ON `%s` (%s)',
+                        $name,
+                        $this->table,
+                        $columnList
+                    );
+                }
+            } else {
+                if ($type === 'primary') {
+                    $this->operations[] = sprintf('ADD PRIMARY KEY (%s)', $columnList);
+                } elseif ($type === 'unique') {
+                    $this->operations[] = sprintf('ADD CONSTRAINT `%s` UNIQUE (%s)', $name, $columnList);
+                } else {
+                    $this->operations[] = sprintf('ADD INDEX `%s` (%s)', $name, $columnList);
+                }
+            }
+
+            return $this;
+        }
+
         $definition = match ($type) {
             'primary' => sprintf('PRIMARY KEY (`%s`)', implode('`, `', $columns)),
             'unique' => sprintf('UNIQUE KEY `%s` (%s)', $name, $columnList),
@@ -482,12 +548,16 @@ class ColumnDefinition
     private ?string $charset = null;
     private ?string $collation = null;
     private bool $change = false;
+    private bool $primaryKey = false;
+    private bool $autoIncrement = false;
 
     public function __construct(
         private Blueprint $blueprint,
         private string $column,
         private string $type
     ) {
+        $upperType = strtoupper($type);
+        $this->autoIncrement = str_contains($upperType, 'AUTO_INCREMENT');
     }
 
     public function nullable(bool $value = true): self
@@ -514,7 +584,13 @@ class ColumnDefinition
 
     public function primary(?string $name = null): self
     {
-        $this->blueprint->primary($this->column, $name);
+        $this->primaryKey = true;
+
+        if ($this->isSqlite()) {
+            $this->blueprint->registerPrimaryColumns([$this->column]);
+        } else {
+            $this->blueprint->primary($this->column, $name);
+        }
 
         return $this;
     }
@@ -626,15 +702,35 @@ class ColumnDefinition
 
     public function toSql(): string
     {
+        $driver = strtolower($this->blueprint->getDriver());
         $type = $this->compileType();
         $definition = sprintf('`%s` %s', $this->column, $type);
+        $skipNullDefault = false;
 
-        if ($this->charset !== null) {
+        if ($this->primaryKey && $this->isSqlite()) {
+            if ($this->autoIncrement) {
+                $definition = sprintf('`%s` INTEGER PRIMARY KEY AUTOINCREMENT', $this->column);
+            } else {
+                $definition .= ' PRIMARY KEY';
+            }
+
+            $skipNullDefault = true;
+        }
+
+        if ($this->charset !== null && $driver === 'mysql') {
             $definition .= ' CHARACTER SET ' . $this->charset;
         }
 
-        if ($this->collation !== null) {
+        if ($this->collation !== null && $driver === 'mysql') {
             $definition .= ' COLLATE ' . $this->collation;
+        }
+
+        if ($skipNullDefault) {
+            if ($this->defaultSet && !$this->autoIncrement) {
+                $definition .= ' DEFAULT ' . $this->formatDefault($this->defaultValue);
+            }
+
+            return $definition;
         }
 
         $definition .= $this->nullable ? ' NULL' : ' NOT NULL';
@@ -684,6 +780,12 @@ class ColumnDefinition
     {
         $type = $this->type;
 
+        $driver = strtolower($this->blueprint->getDriver());
+
+        if (in_array($driver, ['sqlite', 'sqlite3'], true)) {
+            return $this->mapSqliteType($type);
+        }
+
         if ($this->unsigned && !str_contains(strtoupper($type), 'UNSIGNED')) {
             $type .= ' UNSIGNED';
         }
@@ -731,6 +833,50 @@ class ColumnDefinition
         }
 
         return $column;
+    }
+
+    private function mapSqliteType(string $type): string
+    {
+        $upper = strtoupper($type);
+
+        if ($this->autoIncrement || str_contains($upper, 'AUTO_INCREMENT')) {
+            return 'INTEGER';
+        }
+
+        if (str_starts_with($upper, 'BIGINT') || str_starts_with($upper, 'INT') || str_starts_with($upper, 'TINYINT')) {
+            return 'INTEGER';
+        }
+
+        if (str_starts_with($upper, 'VARCHAR') || str_starts_with($upper, 'CHAR')) {
+            return 'TEXT';
+        }
+
+        if (
+            str_starts_with($upper, 'LONGTEXT') ||
+            str_starts_with($upper, 'MEDIUMTEXT') ||
+            str_starts_with($upper, 'TEXT')
+        ) {
+            return 'TEXT';
+        }
+
+        if (str_starts_with($upper, 'ENUM')) {
+            return 'TEXT';
+        }
+
+        if ($upper === 'BOOLEAN') {
+            return 'INTEGER';
+        }
+
+        if ($upper === 'DATETIME' || $upper === 'TIMESTAMP') {
+            return 'DATETIME';
+        }
+
+        return $type;
+    }
+
+    private function isSqlite(): bool
+    {
+        return in_array(strtolower($this->blueprint->getDriver()), ['sqlite', 'sqlite3'], true);
     }
 
     protected function formatDefault(mixed $value): string

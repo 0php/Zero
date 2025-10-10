@@ -66,7 +66,7 @@ class MigrationRepository
     public function log(string $migration, int $batch): void
     {
         Database::query(
-            sprintf('INSERT INTO %s (migration, batch, ran_at) VALUES (?, ?, NOW())', $this->table),
+            sprintf('INSERT INTO %s (migration, batch) VALUES (?, ?)', $this->table),
             null,
             [$migration, $batch],
             'create'
@@ -88,15 +88,48 @@ class MigrationRepository
 
     protected function ensureTableExists(): void
     {
-        $sql = sprintf(
-            'CREATE TABLE IF NOT EXISTS %s (
-                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                migration VARCHAR(255) NOT NULL,
-                batch INT NOT NULL,
-                ran_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4',
-            $this->table
-        );
+        $connection = config('database.connection');
+        $connectionConfig = is_string($connection) ? (array) config('database.' . $connection) : [];
+        $driver = strtolower((string) ($connectionConfig['driver'] ?? 'mysql'));
+
+        switch ($driver) {
+            case 'sqlite':
+            case 'sqlite3':
+                $sql = sprintf(
+                    'CREATE TABLE IF NOT EXISTS %s (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        migration TEXT NOT NULL,
+                        batch INTEGER NOT NULL,
+                        ran_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )',
+                    $this->table
+                );
+                break;
+            case 'pgsql':
+            case 'postgres':
+            case 'postgresql':
+                $sql = sprintf(
+                    'CREATE TABLE IF NOT EXISTS %s (
+                        id BIGSERIAL PRIMARY KEY,
+                        migration VARCHAR(255) NOT NULL,
+                        batch INT NOT NULL,
+                        ran_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )',
+                    $this->table
+                );
+                break;
+            default:
+                $sql = sprintf(
+                    'CREATE TABLE IF NOT EXISTS %s (
+                        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        migration VARCHAR(255) NOT NULL,
+                        batch INT NOT NULL,
+                        ran_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4',
+                    $this->table
+                );
+                break;
+        }
 
         Database::query($sql);
     }

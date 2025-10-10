@@ -81,7 +81,11 @@ final class ServeCommand implements CommandInterface
         $address = escapeshellarg($host . ':' . $port);
         $command = sprintf('php -S %s -t %s', $address, escapeshellarg($root));
 
-        passthru($command);
+        if (! $this->runCommand($command)) {
+            \Zero\Lib\Log::channel('internal')->error(
+                'Error: Unable to execute the PHP built-in server. Ensure passthru, system, exec, or shell_exec is enabled.'
+            );
+        }
     }
 
     private function startFrankenServer(string $host, string $port, string $root, bool $watch): void
@@ -133,7 +137,7 @@ final class ServeCommand implements CommandInterface
                 $events = inotify_read($inotify);
                 if (! empty($events)) {
                     \Zero\Lib\Log::channel('internal')->info('File change detected, restarting server...');
-                    exec($command);
+                    $this->runCommand($command);
                 }
                 usleep(500000);
             }
@@ -146,7 +150,7 @@ final class ServeCommand implements CommandInterface
             if ($current > $lastModified) {
                 $lastModified = $current;
                 \Zero\Lib\Log::channel('internal')->info('File change detected, restarting server...');
-                exec($command);
+                $this->runCommand($command);
             }
             usleep(500000);
         }
@@ -164,5 +168,46 @@ final class ServeCommand implements CommandInterface
         }
 
         return $lastModified;
+    }
+
+    private function runCommand(string $command): bool
+    {
+        if (\function_exists('passthru')) {
+            $status = 0;
+            \passthru($command, $status);
+
+            return true;
+        }
+
+        if (\function_exists('system')) {
+            $status = 0;
+            \system($command, $status);
+
+            return true;
+        }
+
+        if (\function_exists('exec')) {
+            $output = [];
+            $status = 0;
+            \exec($command, $output, $status);
+
+            if ($output !== []) {
+                echo implode(PHP_EOL, $output) . PHP_EOL;
+            }
+
+            return true;
+        }
+
+        if (\function_exists('shell_exec')) {
+            $output = \shell_exec($command);
+
+            if ($output !== null) {
+                echo $output;
+
+                return true;
+            }
+        }
+
+        return false;
     }
 }

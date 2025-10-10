@@ -200,6 +200,17 @@ class Model implements JsonSerializable
     }
 
     /**
+     * Retrieve the first matching record or create it with the provided values.
+     */
+    public static function findOrCreate(array $attributes, array $values = []): static
+    {
+        /** @var static $model */
+        $model = static::query()->findOrCreate($attributes, $values);
+
+        return $model;
+    }
+
+    /**
      * Determine if the model exists in the database.
      */
     public function exists(): bool

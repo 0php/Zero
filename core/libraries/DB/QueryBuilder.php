@@ -381,6 +381,49 @@ class QueryBuilder
     }
 
     /**
+     * Retrieve the first matching row or create it using the provided attributes.
+     *
+     * @return array<string, mixed>
+     */
+    public function findOrCreate(array $attributes, array $values = []): array
+    {
+        if ($this->table === null) {
+            throw new RuntimeException('Cannot find or create without a table name.');
+        }
+
+        if ($attributes === []) {
+            throw new InvalidArgumentException('Find or create requires at least one identifying attribute.');
+        }
+
+        $search = clone $this;
+
+        foreach ($attributes as $column => $value) {
+            if (!is_string($column) || $column === '') {
+                throw new InvalidArgumentException('Find or create attributes must use string column names.');
+            }
+
+            $search->where($column, $value);
+        }
+
+        $record = $search->first();
+
+        if ($record !== null) {
+            return $record;
+        }
+
+        $payload = array_merge($attributes, $values);
+
+        if ($payload === []) {
+            throw new InvalidArgumentException('Find or create requires values to persist.');
+        }
+
+        $insertBuilder = clone $this;
+        $insertBuilder->insert($payload);
+
+        return $search->first() ?? $payload;
+    }
+
+    /**
      * Fetch a single column value from the first matching row.
      */
     public function value(string $column): mixed

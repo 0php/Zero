@@ -92,6 +92,12 @@ $account = User::updateOrCreate(
     ['email' => 'dev@zerophp.com'],
     ['name' => 'Ada Lovelace']
 ); // lookup attributes merge with updates; conflicting keys take the new value
+
+// Retrieve the first matching profile or create it with sensible defaults
+$profile = Profile::findOrCreate(
+    ['user_id' => $account->id],
+    ['nickname' => 'adal']
+);
 ```
 
 `save()` persists the current state (insert or update). `refresh()` reloads the model from the database and resets dirty tracking.

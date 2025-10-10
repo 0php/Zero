@@ -117,6 +117,7 @@ DBML::table('sessions')
 - `insert()` accepts a single associative array or an array of rows; returns the last insert ID reported by the driver where available.
 - `update()` and `delete()` return the number of affected rows.
 - `updateOrCreate($attributes, $values)` finds a matching row (respecting prior constraints), updates it using the merged `$attributes + $values`, or inserts a new row and returns the resulting record as an associative array.
+- `findOrCreate($attributes, $values)` returns the first matching row or inserts one using the merged payload when nothing exists.
 - Wrap several statements in a transaction via the `Zero\Lib\Database` facade when you need atomic work.
 
 ## Raw Expressions & Debugging
@@ -152,6 +153,12 @@ $user = DBML::table('users')->updateOrCreate(
     ['email' => 'dev@zerophp.com'],
     ['name' => 'Ada Lovelace']
 ); // identifying columns are merged with updates; returns an associative array
+
+// Retrieve or bootstrap a related profile with sensible defaults
+$profile = DBML::table('profiles')->findOrCreate(
+    ['user_id' => $user['id'] ?? null],
+    ['nickname' => 'adal']
+);
 ```
 
 See the [Models guide](models.md) for relationship helpers, lifecycle hooks, and attribute utilities. For deeper internals inspect `core/libraries/DB/QueryBuilder.php`; the `DBML` facade simply forwards to that class.

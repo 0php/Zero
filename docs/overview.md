@@ -17,7 +17,7 @@ Zero Framework is a lightweight, native-PHP micro-framework inspired by Laravel'
 - **Mailing**: `Zero\Lib\Mail\Mailer` wraps SMTP delivery with fluent message composition and dotenv-driven configuration.
 - **HTTP Client**: [`Zero\Lib\Http\Http`](support.md#http-client) exposes a fluent, cURL-backed client for outbound requests with JSON helpers and timeout configuration.
 - **String Utilities**: [`Zero\Lib\Support\Str`](support.md#string-helpers) bundles common string transformations (studly, snake, camel, slug, etc.) for CLI and app code.
-- **Storage**: [`Zero\Lib\Storage\Storage`](support.md#storage) writes files to the configured disks; uploaded files call `$file->store()` to persist content.
+- **Storage**: [`Zero\Lib\Storage\Storage`](storage.md) writes files to the configured disks; uploaded files call `$file->store()` to persist content.
 
 ## Next Steps
 
@@ -25,6 +25,7 @@ Zero Framework is a lightweight, native-PHP micro-framework inspired by Laravel'
 - Review [routing](router.md) to understand grouping, middleware, and parameter binding.
 - Dive into [DBML](dbml.md) for building SQL queries fluently.
 - Explore the [model layer](models.md) to work with active-record style objects.
+- Configure database credentials with the [database connection guide](database-connections.md).
 - Review the [migrations guide](migrations.md) to learn how to shape tables, tweak charset/collation, and modify columns safely.
 - Review the [CLI tooling](cli.md) for scaffolding, migrations, and seeding workflows.
 - Learn how to compose templates in the [view layer](view.md).

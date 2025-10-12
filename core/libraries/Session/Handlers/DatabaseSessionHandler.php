@@ -88,6 +88,16 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
             );
 
             if ((int) $updated === 0) {
+                $existing = Database::first(
+                    sprintf('SELECT id FROM %s WHERE id = ?', $this->table),
+                    null,
+                    [$id]
+                );
+
+                if (is_array($existing)) {
+                    return true;
+                }
+
                 Database::query(
                     sprintf('INSERT INTO %s (id, payload, last_activity, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', $this->table),
                     null,

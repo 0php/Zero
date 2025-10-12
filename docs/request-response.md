@@ -17,7 +17,7 @@ Zero Framework models each HTTP cycle with dedicated request and response abstra
 
 ### Uploaded Files
 
-- Retrieve uploads via `Request::file('avatar')`; the method returns an `UploadedFile` instance with helpers like `getClientOriginalName()` and `store()`.
+- Retrieve uploads via `Request::file('avatar')`; the method returns an `UploadedFile` instance (extending the generic `Zero\Lib\Filesystem\File`) with helpers like `getClientOriginalName()` and `store()`.
 - Multiple uploads (e.g., `photos[]`) return an array of `UploadedFile` objects that can each be stored individually.
 - Call `$file->store('avatars')` to persist the file using the storage layer, or `$file->storeAs('avatars', 'custom-name.jpg')` for custom filenames.
 

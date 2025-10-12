@@ -112,7 +112,7 @@ class Router
 
         foreach ($routes as $route => $definition) {
             try {
-                $pattern = self::compileRouteToRegex($route);
+        $pattern = self::compileRouteToRegex($route);
 
                 if (preg_match($pattern, $requestUri, $matches)) {
                     $parameters = self::extractRouteParameters($matches);
@@ -217,7 +217,13 @@ class Router
     private static function compileRouteToRegex(string $route): string
     {
         $routePattern = trim($route, '/');
-        $pattern = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[^/]+)', $routePattern);
+        $pattern = preg_replace_callback('/\{([a-zA-Z0-9_]+)(:[^}]+)?\}/', function (array $matches): string {
+            $name = $matches[1];
+            $custom = $matches[2] ?? null;
+            $regex = $custom !== null ? substr($custom, 1) : '[^/]+';
+
+            return '(?P<' . $name . '>' . $regex . ')';
+        }, $routePattern);
 
         return '#^' . $pattern . '(?:/)?$#';
     }

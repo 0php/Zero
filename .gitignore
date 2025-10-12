@@ -17,3 +17,5 @@ storage/framework/schedule
 storage/cache/rate_limit
 
 storage/meta/*
+storage/database/*
+

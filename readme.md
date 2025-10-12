@@ -153,6 +153,9 @@ zero                # CLI entry point for serving and scaffolding
 | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `php zero serve [--host] [--port] [--root] [--watch] [--franken] [--swolee]` | Run the development server (with optional file watching or alternative backends). |
 | `php zero make:controller Name [--force]`                                    | Generate a controller scaffold under `app/controllers`.                           |
+| `php zero log:clear [--channel] [--path]`                                    | Delete generated `*.log` files for the chosen log channel or directory.          |
+| `php zero db:dump [--connection] [--file]`                                   | Export the configured database to an SQL dump file.                              |
+| `php zero db:restore [--connection] [--file]`                                | Restore the configured database from an SQL dump file.                           |
 | `php zero make:service Name [--force]`                                       | Generate a service class in `app/services`.                                       |
 | `php zero make:model Name [--force]`                                         | Generate an active-record model in `app/models`.                                  |
 | `php zero make:migration Name [--force]`                                     | Create a timestamped migration in `database/migrations`.                          |

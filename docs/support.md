@@ -1,6 +1,6 @@
 # Support Utilities
 
-Zero ships a couple of lightweight helpers that make day-to-day tasks easier. The HTTP client saves you from wrestling with raw cURL handles, and the string helper mirrors Laravel's `Str` facade for quick transformations.
+Zero ships a couple of lightweight helpers that make day-to-day tasks easier. The HTTP client saves you from wrestling with raw cURL handles, the `DateTime` helper wraps immutable dates with convenience methods, and the string helper mirrors Laravel's `Str` facade for quick transformations.
 
 ## HTTP Client
 
@@ -33,6 +33,48 @@ if ($response->successful()) {
 - Use `$response->status()`, `$response->body()`, `$response->json()`, `$response->headers()` to inspect responses.
 
 By default requests throw no exceptions—check `$response->failed()` or `$response->successful()` as needed.
+
+## Date & Time
+
+Namespace: `Zero\Lib\Support\DateTime`
+
+The support `DateTime` class extends PHP's `DateTimeImmutable` with fluent helpers for common tasks.
+
+```php
+use Zero\Lib\Support\DateTime;
+
+$now = DateTime::now();
+$tomorrow = $now->addDays(1);
+
+echo $tomorrow->diffForHumans($now); // 1 day from now
+
+$parisNoon = DateTime::parse('today 12:00', new DateTimeZone('Europe/Paris'));
+$local = $parisNoon->inTimeZone('UTC');
+```
+
+Companion facade `Zero\Lib\Support\Date` keeps the old mutable wrapper for backwards-compatible chaining, but new code should prefer the immutable `DateTime` helper.
+
+Useful methods:
+
+- `DateTime::now(?DateTimeZone $tz = null)` – immutable current timestamp
+- `DateTime::parse(string $value, ?DateTimeZone $tz = null)` – parse relative or absolute strings
+- `addDays(int $days)` / `subDays(int $days)` – clone with days added or subtracted
+- `diffForHumans(DateTimeInterface $other)` – human readable difference (`"2 hours ago"`, `"3 days from now"`)
+- `inTimeZone(string|DateTimeZone $tz)` – convert to a new timezone
+
+## Filesystem Helpers
+
+Namespace: `Zero\Lib\Filesystem\File`
+
+The `File` class wraps filesystem operations (reading, writing, hashing, MIME helpers) and now supports in-memory factories:
+
+- `File::fromPath('/path/to/file')`
+- `File::fromContents($string, extension: 'txt')`
+- `File::fromBase64($payload, extension: 'png')`
+- `File::fromUrl('https://example.com/logo.png')`
+- `File::from($mixed)` – auto-detects path, URL, base64 or raw contents
+
+Every file exposes helpers such as `getSignedUrl()`, `setMimeType()`, `setExtension()`, `isImage()/isVideo()/is('pdf')`, etc. These instances integrate with `Storage::put()`—you can pass a `File` (or `UploadedFile`, which extends it) directly to persist it on any disk.
 
 ## String Helpers
 
@@ -140,48 +182,3 @@ $queueName = Str::of('queue')
 ```
 
 These helpers are framework-agnostic and usable in both CLI and HTTP code paths. See `Zero\Lib\Support\Stringable` for the fluent helper implementation and available chaining behaviour.
-
-## Storage
-
-Namespace: `Zero\\Lib\\Storage\\Storage`
-
-The storage facade provides a thin wrapper around the configured filesystem disks. The default `local` driver writes to `storage/` and can be customised through `config/storage.php` or `.env` (`STORAGE_DISK`, `STORAGE_LOCAL_ROOT`).
-
-### Writing files
-
-```php
-use Zero\\Lib\\Storage\\Storage;
-
-$path = Storage::put('reports/latest.txt', "Report generated at " . date('c'));
-// $path === 'reports/latest.txt'
-
-// Read it back directly from the disk root
-$contents = file_get_contents(storage_path($path));
-```
-
-Pair it with uploaded files:
-
-```php
-$avatar = Request::file('avatar');
-
-if ($avatar && $avatar->isValid()) {
-    $path = $avatar->store('avatars');
-    // $path => avatars/slug-64d2c6b1e5c3.jpg
-}
-```
-
-Need a custom name?
-
-```php
-$avatar->storeAs('avatars', 'user-' . $user->id . '.jpg');
-```
-
-Additional disks can be registered in `config/storage.php`; the storage manager will throw if you request a disk that has not been configured.
-
-Create filesystem links with the CLI:
-
-```bash
-php zero storage:link
-```
-
-The command reads the `links` array in `config/storage.php` (defaults to linking `public/storage` to the `public` disk) and creates the appropriate symlinks. Ensure the web server user has permission to create the link path or run the command with suitable privileges.

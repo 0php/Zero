@@ -96,15 +96,49 @@ class Response
         return static::redirect($target, $status, $headers);
     }
 
-    public static function stream(callable|string $stream, int $status = 200, array $headers = []): static
+    public static function stream(callable|string $stream, int $status = 200, array $headers = [], string $contentType = 'text/event-stream'): static
     {
         $response = new static();
         $response->setStatus($status);
         $response->stream($stream);
         $response->withHeaders($headers);
-        $response->ensureContentType('text/event-stream');
+        $response->ensureContentType($contentType);
 
         return $response;
+    }
+
+    public static function file(string $path, array $headers = [], ?string $name = null, string $disposition = 'inline'): static
+    {
+        if (!is_file($path)) {
+            throw new RuntimeException(sprintf('File [%s] does not exist.', $path));
+        }
+
+        $mime = mime_content_type($path) ?: 'application/octet-stream';
+        $size = filesize($path);
+        $name ??= basename($path);
+        $encodedName = addcslashes($name, '"\\');
+
+        $baseHeaders = [
+            'Content-Type' => $mime,
+            'Content-Disposition' => sprintf('%s; filename="%s"', $disposition, $encodedName),
+        ];
+
+        if ($size !== false) {
+            $baseHeaders['Content-Length'] = (string) $size;
+        }
+
+        $merged = array_merge($baseHeaders, $headers);
+
+        $contents = file_get_contents($path);
+
+        if ($contents === false) {
+            throw new RuntimeException(sprintf('Unable to read file [%s].', $path));
+        }
+
+        return (new static())
+            ->setStatus(200)
+            ->withHeaders($merged)
+            ->setContent($contents);
     }
 
     public static function noContent(int $status = 204, array $headers = []): static

@@ -27,6 +27,11 @@ bootApplicationHelpers();
 require_once(base('routes/web.php'));
 
 /**
+ * Register framework-provided routes (e.g. signed storage endpoints).
+ */
+require_once(core_path('libraries/Internal/Route.php'));
+
+/**
  * Dispatch the incoming request to the appropriate route handler.
  * - Extract the current URL from the request URI.
  * - Remove any query parameters by splitting the URL at '?'.

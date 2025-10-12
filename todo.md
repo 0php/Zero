@@ -10,7 +10,7 @@
 ## CLI Tooling
 
 - [x] Extend `zero` CLI with subcommands (migrate, make:model, make:controller, serve options)
-- [ ] Introduce command dispatcher structure for registering new commands cleanly
+- [x] Introduce command dispatcher structure for registering new commands cleanly
 - [x] Provide scaffolding stubs for generated resources and update docs
 
 ## Database Layer
@@ -20,16 +20,16 @@
 - [ ] Enhance DBML/Model with eager loading helpers (e.g., `with`, `load`) and relationship batching
 - [x] Implement pagination helpers for DBML and Model (e.g., `paginate`, `simplePaginate`)
 - [ ] Write integration tests covering migrations/model behaviours
-- [ ] Implement subquery relationship (e.g `whereHas`, `has`, `whereDoesntHave`)
+- [x] Implement subquery relationship (e.g `whereHas`, `has`, `whereDoesntHave`)
 
 ## Library Refactor
 
-- [ ] Modularize HTTP layer (split `Http\Request`/`Http\Response` into smaller concern-specific classes)
-- [ ] Break query builder into focused components (clauses, compilers, relations) under `Zero\\Lib\\DB`
-- [ ] Extract router route collection and middleware pipeline into dedicated classes
-- [ ] Restructure CLI commands into separate command classes with a dispatcher
+- [x] Modularize HTTP layer (split `Http\Request`/`Http\Response` into smaller concern-specific classes)
+- [x] Break query builder into focused components (clauses, compilers, relations) under `Zero\\Lib\\DB`
+- [x] Extract router route collection and middleware pipeline into dedicated classes
+- [x] Restructure CLI commands into separate command classes with a dispatcher
 - [ ] Move helper utilities into grouped support modules (e.g., `Support/Arr`, `Support/Str`)
-- [ ] Introduce validation layer (validator factory, rule classes, request helpers)
+- [x] Introduce validation layer (validator factory, rule classes, request helpers)
 
 ## Error Handling
 
@@ -40,5 +40,4 @@
 
 ## Mailable
 
-- [ ] Create mailable custom services
-- [ ] Add custom driver like sendgrid etc
+- [x] Create mailable custom services

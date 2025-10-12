@@ -14,5 +14,5 @@ sqlite
 storage/logs
 
 storage/framework/schedule
+storage/database/*
 
-storage/meta/*

@@ -148,6 +148,30 @@ php zero storage:link
 
 Creates symbolic links defined in `config/storage.php` (by default linking `public/storage` to the public disk). The command skips existing links and reports missing targets.
 
+### Clear Log Files
+
+```bash
+php zero log:clear [--channel=file] [--path=/absolute/log/path]
+```
+
+Removes `*.log` files from the target directory. When `--path` is omitted the command resolves the directory from `config/logging.php` (defaulting to `storage/framework/logs`). Only log files are deleted—placeholder files (such as `.gitignore`) remain.
+
+### Dump the Database
+
+```bash
+php zero db:dump [--connection=mysql] [--file=storage/database/dumps/backup.sql]
+```
+
+Exports the configured database to an SQL dump. Provide `--file` to choose the destination path (relative paths are resolved against the current working directory); otherwise the dump is written to `storage/database/dumps/<connection>-<timestamp>.sql`. The command supports MySQL (`mysqldump`), PostgreSQL (`pg_dump`), and SQLite (just copies the database file).
+
+### Restore the Database
+
+```bash
+php zero db:restore [--connection=mysql] [--file=storage/database/dumps/backup.sql]
+```
+
+Restores an SQL dump back into the configured database. When `--file` is omitted the most recent dump in `storage/database/dumps` is used; specify an explicit path to restore a custom dump. The command supports MySQL (`mysql`), PostgreSQL (`psql`), and SQLite.
+
 ### Inspect Registered Routes
 
 ```bash

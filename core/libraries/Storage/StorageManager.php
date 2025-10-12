@@ -6,6 +6,10 @@ namespace Zero\Lib\Storage;
 
 use InvalidArgumentException;
 use Zero\Lib\Storage\Drivers\LocalStorage;
+use Zero\Lib\Storage\Drivers\S3Storage;
+
+use function env;
+use function storage_path;
 
 final class StorageManager
 {
@@ -21,11 +25,20 @@ final class StorageManager
     {
         $config = config('storage');
 
-        $this->defaultDisk = $config['default'] ?? 'local';
+        $this->defaultDisk = $config['default'] ?? 'public';
         $this->disks = $config['disks'] ?? [
-            'local' => [
+            'public' => [
                 'driver' => 'local',
-                'root' => storage_path(),
+                'root' => storage_path('public'),
+                'url' => (static function (): string {
+                    $appUrl = rtrim((string) env('APP_URL', ''), '/');
+
+                    return $appUrl === '' ? '' : $appUrl . '/storage';
+                })(),
+            ],
+            'private' => [
+                'driver' => 'local',
+                'root' => storage_path('private'),
             ],
         ];
     }
@@ -44,13 +57,14 @@ final class StorageManager
 
         $driver = $this->disks[$name]['driver'] ?? 'local';
 
-        return $this->resolved[$name] = $this->createDriver($driver, $this->disks[$name]);
+        return $this->resolved[$name] = $this->createDriver($name, $driver, $this->disks[$name]);
     }
 
-    private function createDriver(string $driver, array $config): object
+    private function createDriver(string $name, string $driver, array $config): object
     {
         return match ($driver) {
-            'local' => new LocalStorage($config),
+            'local' => new LocalStorage($config, $name),
+            's3' => new S3Storage($config, $name),
             default => throw new InvalidArgumentException(sprintf('Unsupported storage driver [%s].', $driver)),
         };
     }

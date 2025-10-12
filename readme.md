@@ -145,7 +145,7 @@ zero                # CLI entry point for serving and scaffolding
 
 - [`Zero\Lib\Http\Http`](docs/support.md#http-client) provides a fluent HTTP client for outbound requests (JSON helpers, timeouts, retries, file uploads).
 - [`Zero\Lib\Support\Str`](docs/support.md#string-helpers) bundles familiar string transformations (studly, camel, snake, slug, etc.) for CLI and application code.
-- [`Zero\Lib\Storage\Storage`](docs/support.md#storage) persists files to the configured disks; pair with uploaded files via `$file->store()`.
+- [`Zero\Lib\Storage\Storage`](docs/storage.md) persists files to the configured disks; pair with uploaded files via `$file->store()`.
 
 ## CLI Reference
 
@@ -171,7 +171,7 @@ zero                # CLI entry point for serving and scaffolding
 - Sessions default to the database driver via `config/session.php`; adjust lifetime, cookie name, or switch to encrypted cookie storage with `SESSION_DRIVER=cookie`.
 - Authentication tokens default to a one-week TTL; set `AUTH_TOKEN_TTL` (seconds) in `.env` or `config/auth.php` if you need different longevity.
 - Logging is defined in `config/logging.php`. Switch between file and database channels with `LOG_DRIVER`, and point the database channel at a custom table via `LOG_TABLE`.
-- File storage defaults to the `local` disk; adjust `config/storage.php` or `.env` (`STORAGE_DISK`, `STORAGE_LOCAL_ROOT`) and persist uploads with `Storage::put()` / `$file->store()`.
+- File storage defaults to the `public` disk (local); configure S3 via the new `s3` disk when needed; adjust `config/storage.php` or `.env` (`STORAGE_DISK`, `STORAGE_PUBLIC_ROOT`, `STORAGE_PRIVATE_ROOT`) and persist uploads with `Storage::put()` / `$file->store()`.
 - Updater settings live in `config/update.php`. Set `UPDATE_MANIFEST_URL` (and optional `UPDATE_TIMEOUT`) to enable the `update:latest` command.
   - Leave `UPDATE_MANIFEST_URL` blank to pull the latest GitHub release (or branch) using `UPDATE_GITHUB_REPO` and `UPDATE_GITHUB_BRANCH`.
 - Update `config/view.php`, `config/storage.php`, and other config files to match your deployment needs.
@@ -191,6 +191,7 @@ For a production-ready setup (Nginx + PHP-FPM, environment variables, logging, m
 - [Authentication](docs/auth.md)
 - [Mailer](docs/mail.md)
 - [CLI Tooling](docs/cli.md)
+- [Storage](docs/storage.md)
 
 ## Roadmap
 

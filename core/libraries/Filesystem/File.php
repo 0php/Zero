@@ -540,8 +540,8 @@ class File
     private function relativePath(): string
     {
         $roots = [
-            storage_path('private'),
-            storage_path('public'),
+            storage_path('app/private'),
+            storage_path('app/public'),
             storage_path(),
         ];
 

@@ -11,8 +11,12 @@ use Zero\Lib\Validation\Rules\BooleanRule;
 use Zero\Lib\Validation\Rules\Confirmed;
 use Zero\Lib\Validation\Rules\Email;
 use Zero\Lib\Validation\Rules\Exists;
+use Zero\Lib\Validation\Rules\FileRule;
+use Zero\Lib\Validation\Rules\Image;
 use Zero\Lib\Validation\Rules\Max;
 use Zero\Lib\Validation\Rules\Min;
+use Zero\Lib\Validation\Rules\MimeTypes;
+use Zero\Lib\Validation\Rules\Mimes;
 use Zero\Lib\Validation\Rules\Number;
 use Zero\Lib\Validation\Rules\Password;
 use Zero\Lib\Validation\Rules\Required;
@@ -288,6 +292,10 @@ final class Validator
             'boolean' => new BooleanRule(),
             'array' => new ArrayRule(),
             'number' => new Number(),
+            'file' => new FileRule(),
+            'image' => new Image(),
+            'mimes' => $this->buildMimesRule($parameters),
+            'mimetypes' => $this->buildMimeTypesRule($parameters),
             'unique' => $this->buildUniqueRule($parameters),
             'exists' => $this->buildExistsRule($parameters),
             'password' => $this->buildPasswordRule($parameters),
@@ -335,6 +343,48 @@ final class Validator
         }
 
         return new Password($requirements);
+    }
+
+    private function buildMimesRule(array $parameters): Mimes
+    {
+        $extensions = $this->extractStringListParameter('mimes', $parameters);
+
+        return new Mimes($extensions);
+    }
+
+    private function buildMimeTypesRule(array $parameters): MimeTypes
+    {
+        $types = $this->extractStringListParameter('mimetypes', $parameters);
+
+        return new MimeTypes($types);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function extractStringListParameter(string $rule, array $parameters): array
+    {
+        if ($parameters === []) {
+            throw new InvalidArgumentException(sprintf('Validation rule [%s] expects at least one parameter.', $rule));
+        }
+
+        $normalized = [];
+
+        foreach ($parameters as $parameter) {
+            $value = strtolower(trim((string) $parameter));
+
+            if ($value !== '') {
+                $normalized[] = $value;
+            }
+        }
+
+        $normalized = array_values(array_unique($normalized));
+
+        if ($normalized === []) {
+            throw new InvalidArgumentException(sprintf('Validation rule [%s] requires non-empty parameters.', $rule));
+        }
+
+        return $normalized;
     }
 
     private function extractTableParameter(string $rule, array $parameters): string

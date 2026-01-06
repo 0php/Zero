@@ -4,7 +4,7 @@ Zero Framework ships with a light filesystem abstraction that keeps uploads, gen
 
 ## Configuration
 
-The `config/storage.php` file describes the available disks. At the top of the file we cache `APP_URL` once and then return a clean array:
+The `config/storage.php` file describes the available disks. At the top of the file we cache `APP_URL` once and then return a clean array. You don’t need to set
 
 ```php
 $appUrl = rtrim((string) env('APP_URL', 'http://127.0.0.1:8000'), '/');
@@ -14,13 +14,13 @@ return [
     'disks' => [
         'public' => [
             'driver' => 'local',
-            'root' => env('STORAGE_PUBLIC_ROOT', storage_path('public')),
+            'root' => env('STORAGE_PUBLIC_ROOT', storage_path('app/public')),
             'url' => $appUrl . '/storage',
             'visibility' => 'public',
         ],
         'private' => [
             'driver' => 'local',
-            'root' => env('STORAGE_PRIVATE_ROOT', storage_path('private')),
+            'root' => env('STORAGE_PRIVATE_ROOT', storage_path('app/private')),
             'url' => $appUrl . '/files/private',
             'visibility' => 'private',
         ],
@@ -157,6 +157,16 @@ if ($avatar && $avatar->isValid()) {
 }
 ```
 
+Validate incoming uploads with the built-in rules before persisting them:
+
+```php
+$data = Request::validate([
+    'avatar' => ['required', 'file', 'image', 'mimes:jpg,png', 'max:2048'],
+]);
+```
+
+`file` ensures the payload is a valid `UploadedFile`, `image` restricts the MIME type to `image/*`, `mimes` checks the extension, and `min`/`max` interpret their limits in kilobytes when applied to files.
+
 Need to control the filename or disk?
 
 ```php
@@ -164,14 +174,6 @@ $avatar->storeAs('avatars', $avatar->hashedName(), disk: 'private');
 ```
 
 Both `store()` and `storeAs()` return the relative path written to the disk. Pass the optional disk name (`Storage::disk('private')` or `$file->store('docs', 'private')`) to separate public assets from private documents.
-
-You can verify your credentials with the `upload:test` console command:
-
-```bash
-php zero upload:test --disk=s3 --directory=uploads/tests
-```
-
-It uploads a random payload, prints the relative path, and shows both the direct and signed URLs so you can confirm that the chosen disk is reachable.
 
 ## Additional Disks
 

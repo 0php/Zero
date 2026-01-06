@@ -38,6 +38,16 @@ class Request
      */
     public function validate(array $rules, array $messages = [], array $attributes = []): array
     {
-        return Validator::make($this->all(), $rules, $messages, $attributes)->validate();
+        return Validator::make($this->validationData(), $rules, $messages, $attributes)->validate();
+    }
+
+    /**
+     * Merge input, JSON payload, and normalized files for validation.
+     *
+     * @return array<string, mixed>
+     */
+    protected function validationData(): array
+    {
+        return array_replace_recursive($this->all(), $this->files());
     }
 }

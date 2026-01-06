@@ -6,7 +6,10 @@
  */
 if(!function_exists('base')) {
     function base($path = ''){
-        return $_ENV['BASE_PATH'] . "/{$path}";
+        $root = rtrim($_ENV['BASE_PATH'], '/\\');
+        $normalized = ltrim((string) $path, '/\\');
+
+        return $normalized === '' ? $root : $root . '/' . $normalized;
     }
 }
 

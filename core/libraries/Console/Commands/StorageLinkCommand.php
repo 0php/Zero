@@ -100,7 +100,9 @@ final class StorageLinkCommand implements CommandInterface
         $target = rtrim($target, DIRECTORY_SEPARATOR);
 
         if (!file_exists($target)) {
-            throw new InvalidArgumentException(sprintf('Target path [%s] does not exist.', $target));
+            if (!@mkdir($target, 0775, true) && !is_dir($target)) {
+                throw new InvalidArgumentException(sprintf('Target path [%s] does not exist and could not be created.', $target));
+            }
         }
 
         if (is_link($link)) {

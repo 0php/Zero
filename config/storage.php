@@ -3,6 +3,14 @@
 declare(strict_types=1);
 
 $appUrl = rtrim((string) env('APP_URL', 'http://127.0.0.1:8000'), '/');
+$publicRootEnv = env('STORAGE_PUBLIC_ROOT', '');
+$privateRootEnv = env('STORAGE_PRIVATE_ROOT', '');
+$publicRoot = (is_string($publicRootEnv) && trim($publicRootEnv) !== '')
+    ? $publicRootEnv
+    : storage_path('app/public');
+$privateRoot = (is_string($privateRootEnv) && trim($privateRootEnv) !== '')
+    ? $privateRootEnv
+    : storage_path('app/private');
 
 return [
     'default' => env('STORAGE_DISK', 'public'),
@@ -10,14 +18,14 @@ return [
     'disks' => [
         'public' => [
             'driver' => 'local',
-            'root' => env('STORAGE_PUBLIC_ROOT', storage_path('public')),
+            'root' => $publicRoot,
             'url' => $appUrl . '/storage',
             'visibility' => 'public',
         ],
 
         'private' => [
             'driver' => 'local',
-            'root' => env('STORAGE_PRIVATE_ROOT', storage_path('private')),
+            'root' => $privateRoot,
             'url' => $appUrl . '/files/private',
             'visibility' => 'private',
         ],

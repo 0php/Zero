@@ -51,12 +51,16 @@ User::create($data);
 | `email` | Validates format using `FILTER_VALIDATE_EMAIL`. |
 | `boolean` | Accepts booleans, `0`/`1`, or string equivalents (`"true"`, `"false"`, `"on"`, `"off"`). |
 | `array` | Requires the value to be an array. |
-| `min:<value>` | Strings: minimum length; arrays: minimum item count; numerics: minimum numeric value. |
-| `max:<value>` | Strings: maximum length; arrays: maximum item count; numerics: maximum numeric value. |
+| `min:<value>` | Strings: minimum length; arrays: minimum item count; numerics: minimum numeric value; files: minimum size in kilobytes. |
+| `max:<value>` | Strings: maximum length; arrays: maximum item count; numerics: maximum numeric value; files: maximum size in kilobytes. |
 | `confirmed` | Requires a matching `<field>_confirmation` input. |
 | `exists:table,column` | Ensures the value (or each value in an array) exists in the specified table/column (column defaults to the attribute name). |
 | `unique:table,column,ignore,idColumn` | Fails when the value already exists; optional ignore/id parameters match Laravel's signature. Arrays are checked element by element. |
 | `password:letters,numbers,symbols` | Enforces password character classes; pass comma-separated requirements (omit parameters for a simple string check). |
+| `file` | Ensures the value is a valid `UploadedFile` (or `File`) instance and, for uploads, that no PHP upload error occurred. |
+| `image` | Confirms the file is an image (`image/*` MIME). Use alongside `file`. |
+| `mimes:jpg,png` | Accepts files whose extension matches one of the listed values (case-insensitive). |
+| `mimetypes:image/jpeg,image/png` | Matches explicit MIME types; wildcard groups such as `image/*` are supported. |
 - Override error copy or attribute names by supplying the optional `$messages` / `$attributes` arrays:
 
 ```php

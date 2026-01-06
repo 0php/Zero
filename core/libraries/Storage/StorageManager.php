@@ -29,7 +29,7 @@ final class StorageManager
         $this->disks = $config['disks'] ?? [
             'public' => [
                 'driver' => 'local',
-                'root' => storage_path('public'),
+                'root' => storage_path('app/public'),
                 'url' => (static function (): string {
                     $appUrl = rtrim((string) env('APP_URL', ''), '/');
 
@@ -38,7 +38,7 @@ final class StorageManager
             ],
             'private' => [
                 'driver' => 'local',
-                'root' => storage_path('private'),
+                'root' => storage_path('app/private'),
             ],
         ];
     }

@@ -126,6 +126,7 @@ zero                # CLI entry point for serving and scaffolding
 ### Views & Layouts
 
 - `Zero\Lib\View::render('pages/home', $data)` compiles Blade-inspired templates with layout, section, include, and directive support.
+- `Zero\Lib\View::renderString($template, $data)` renders a Blade-style template string when you already have the markup in memory.
 - Toggle view caching via `config/view.php` or `View::configure()`. Compiled templates live under `storage/cache/views`.
 - Global `view()` and `response()` helpers simplify controller return values.
 

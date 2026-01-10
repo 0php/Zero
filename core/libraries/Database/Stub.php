@@ -16,6 +16,9 @@ namespace {
         public static function query($query, $bind=null, $params=null, $debug=false) {}
         public static function escape($string) {}
         public static function connection($type) {}
+        public static function startTransaction() {}
+        public static function commit() {}
+        public static function rollback() {}
 
     }
 

@@ -120,6 +120,44 @@ DBML::table('sessions')
 - `findOrCreate($attributes, $values)` returns the first matching row or inserts one using the merged payload when nothing exists.
 - Wrap several statements in a transaction via the `Zero\Lib\Database` facade when you need atomic work.
 
+### Transactions
+
+Use the `DB` facade (or `Zero\Lib\Database`) to start, commit, and roll back a transaction. `DBML` exposes the same aliases if you prefer to keep everything in the query layer:
+
+```php
+DB::startTransaction();
+
+try {
+    DBML::table('orders')->insert([
+        'user_id' => $userId,
+        'total' => $total,
+    ]);
+
+    $balance = DBML::table('users')
+        ->where('id', $userId)
+        ->value('balance') ?? 0;
+
+    DBML::table('users')
+        ->where('id', $userId)
+        ->update(['balance' => $balance - $total]);
+
+    DB::commit();
+} catch (Throwable $e) {
+    DB::rollback();
+    throw $e;
+}
+```
+
+If you call `startTransaction()` multiple times, the connection is shared until the outermost `commit()` or a `rollback()`.
+
+The following aliases are equivalent:
+
+```php
+DBML::startTransaction();
+DBML::commit();
+DBML::rollback();
+```
+
 ## Raw Expressions & Debugging
 
 ```php

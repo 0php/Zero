@@ -2,6 +2,25 @@
 
 Zero splits its data tooling into two layers: **DBML (Database Management Layer)** handles fluent query building, while the migration API acts as a lightweight **DBAL (Database Abstraction Layer)** for structural changes. Use DBML when you need to read/write data, and the migration DBAL when you need to create or modify tables.
 
+## Transactions
+
+Schema changes can be wrapped in transactions using the `Schema` facade (aliases the `Database` transaction helpers). Note that some databases auto-commit certain DDL statements.
+
+```php
+Schema::startTransaction();
+
+try {
+    Schema::table('users', function ($table) {
+        $table->string('nickname')->nullable();
+    });
+
+    Schema::commit();
+} catch (Throwable $e) {
+    Schema::rollback();
+    throw $e;
+}
+```
+
 ## Connection Charset & Collation
 
 Driver defaults now read from your environment configuration:

@@ -4,8 +4,16 @@ namespace Zero\Lib;
 use PDO;
 
 class Database {
+    private static ?DatabaseConnection $transactionConnection = null;
+    private static int $transactionLevel = 0;
+
+    private static function connection(): DatabaseConnection
+    {
+        return self::$transactionConnection ?? new DatabaseConnection();
+    }
+
     public static function fetch($query, $bind=null, $params=null, $debug=false) {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->fetch($query, $bind, $params, $debug);
     }
 
@@ -14,43 +22,81 @@ class Database {
     }
 
     public static function first($query, $bind=null, $params=null, $debug=false) {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->first($query, $bind, $params, $debug);
     }
 
     public static function create($query, $bind=null, $params=null, $debug=false) {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->create($query, $bind, $params, $debug);
     }
 
     public static function update($query, $bind=null, $params=null, $debug=false) {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->update($query, $bind, $params, $debug);
     }
 
     public static function delete($query, $bind=null, $params=null, $debug=false) {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->delete($query, $bind, $params, $debug);
     }
 
     public static function query($query, $bind=null, $params=null, $debug=false) {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->query($query, $bind, $params, $debug);
     }
 
     public static function escape($string) {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->escape($string);
     }
 
     public static function write() {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->setConnector('write');
     }
 
     public static function read() {
-        $db = new DatabaseConnection();
+        $db = self::connection();
         return $db->setConnector('read');
+    }
+
+    public static function startTransaction(): void
+    {
+        if (self::$transactionConnection === null) {
+            self::$transactionConnection = new DatabaseConnection();
+        }
+
+        if (self::$transactionLevel === 0) {
+            self::$transactionConnection->beginTransaction();
+        }
+
+        self::$transactionLevel++;
+    }
+
+    public static function commit(): void
+    {
+        if (self::$transactionConnection === null || self::$transactionLevel === 0) {
+            return;
+        }
+
+        self::$transactionLevel--;
+
+        if (self::$transactionLevel === 0) {
+            self::$transactionConnection->commit();
+            self::$transactionConnection = null;
+        }
+    }
+
+    public static function rollback(): void
+    {
+        if (self::$transactionConnection === null || self::$transactionLevel === 0) {
+            return;
+        }
+
+        self::$transactionConnection->rollBack();
+        self::$transactionConnection = null;
+        self::$transactionLevel = 0;
     }
 
 }
@@ -169,5 +215,19 @@ class DatabaseConnection {
         return $this->query($query, $bind, $params, 'delete', $debug);
     }
 
-}
+    public function beginTransaction(): void
+    {
+        $this->connection->beginTransaction();
+    }
 
+    public function commit(): void
+    {
+        $this->connection->commit();
+    }
+
+    public function rollBack(): void
+    {
+        $this->connection->rollBack();
+    }
+
+}

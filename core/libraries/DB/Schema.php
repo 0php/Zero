@@ -12,6 +12,21 @@ use Zero\Lib\Database;
  */
 class Schema
 {
+    public static function startTransaction(): void
+    {
+        Database::startTransaction();
+    }
+
+    public static function commit(): void
+    {
+        Database::commit();
+    }
+
+    public static function rollback(): void
+    {
+        Database::rollback();
+    }
+
     /**
      * Create a new table.
      */

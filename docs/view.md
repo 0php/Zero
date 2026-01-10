@@ -5,6 +5,7 @@ The Zero Framework view layer lets you render native PHP templates with a handfu
 ## Rendering Views
 
 Use the `view()` helper or `View::render()` to produce HTML from a template stored in `resources/views`.
+When you already have a template string (for example, a CMS snippet or email body), use `View::renderString()`.
 
 ```php
 // In a controller or route callback
@@ -15,6 +16,15 @@ return view('pages/home', [
 ```
 
 Both helpers accept an array of data that is extracted into the template's scope. Keys are converted to variables (`$title`, `$posts`, …).
+
+To render a template string:
+
+```php
+$html = View::renderString(
+    '<h1>{{ $title }}</h1><p>{!! $body !!}</p>',
+    ['title' => 'Hello', 'body' => $snippetHtml]
+);
+```
 
 Whenever you print data, prefer the escaped output directive `{{ $value }}`—it runs the expression through `htmlspecialchars`, keeping user-supplied content safe by default.
 
@@ -118,6 +128,7 @@ All helper methods remain available:
 - `View::yieldSection($name)`
 - `View::include($name, $data = [])`
 - `View::render($name, $data = [])`
+- `View::renderString($template, $data = [])`
 
 ## Caching & Configuration
 

@@ -74,6 +74,49 @@ class View
     }
 
     /**
+     * Render a template string and return the resulting HTML.
+     *
+     * @throws Exception
+     */
+    public static function renderString(string $template, array $data = []): string
+    {
+        self::resetState();
+
+        $compiledView = self::compileTemplateString($template);
+
+        if ($data !== []) {
+            extract($data, EXTR_SKIP);
+        }
+
+        ob_start();
+        eval('?>' . $compiledView);
+        $output = ob_get_clean();
+
+        if (self::$layout) {
+            $layout = self::$layout;
+            $layoutFile = base('resources/views/' . $layout . '.php');
+
+            if (!file_exists($layoutFile)) {
+                throw new Exception("Layout file {$layoutFile} not found.");
+            }
+
+            $compiledLayout = self::compileTemplate('layout:' . $layout, $layoutFile);
+
+            if (self::$layoutData !== []) {
+                extract(self::$layoutData, EXTR_OVERWRITE);
+            }
+
+            ob_start();
+            eval('?>' . $compiledLayout);
+            $output = ob_get_clean();
+        }
+
+        self::resetState();
+
+        return $output;
+    }
+
+    /**
      * Start a section.
      */
     public static function startSection(string $section): void
@@ -229,6 +272,50 @@ class View
     }
 
     /**
+     * Compile a raw template string into executable PHP code.
+     */
+    private static function compileTemplateString(string $content): string
+    {
+        $useCache = self::$config['cache_enabled'];
+        $cacheFile = null;
+        $identifier = 'string:' . md5($content);
+
+        if ($useCache) {
+            $cacheFile = self::getCacheFilePath($identifier);
+
+            if (!is_dir(dirname($cacheFile))) {
+                mkdir(dirname($cacheFile), 0777, true);
+            }
+
+            if (self::isStringCacheValid($cacheFile)) {
+                if (self::$config['debug']) {
+                    self::log("Using cached version of view: {$identifier}");
+                }
+
+                $cached = file_get_contents($cacheFile);
+
+                if ($cached === false) {
+                    throw new Exception("Unable to read cached view: {$cacheFile}");
+                }
+
+                return $cached;
+            }
+        }
+
+        $compiled = self::processDirectives($content);
+
+        if ($useCache && $cacheFile !== null) {
+            file_put_contents($cacheFile, $compiled);
+
+            if (self::$config['debug']) {
+                self::log("Cached new version of view: {$identifier}");
+            }
+        }
+
+        return $compiled;
+    }
+
+    /**
      * Build the cache file path for the given view name.
      */
     private static function getCacheFilePath(string $view): string
@@ -252,6 +339,18 @@ class View
         }
 
         return filemtime($viewPath) <= filemtime($cachePath);
+    }
+
+    /**
+     * Check whether a cached string template is still valid.
+     */
+    private static function isStringCacheValid(string $cachePath): bool
+    {
+        if (!file_exists($cachePath)) {
+            return false;
+        }
+
+        return time() - filemtime($cachePath) <= self::$config['cache_lifetime'];
     }
 
     /**

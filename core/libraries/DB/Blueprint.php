@@ -26,6 +26,9 @@ class Blueprint
     /** @var string[] */
     protected array $primaryColumns = [];
 
+    /** @var string[] */
+    protected array $tableConstraints = [];
+
     protected ?string $charset = null;
     protected ?string $collation = null;
     protected string $driver;
@@ -122,6 +125,22 @@ class Blueprint
         return $definition;
     }
 
+    /** Add a decimal column. */
+    public function decimal(string $column, int $precision = 10, int $scale = 2, bool $nullable = false, mixed $default = null): ColumnDefinition
+    {
+        $definition = $this->addColumnDefinition($column, sprintf('DECIMAL(%d, %d)', $precision, $scale));
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        if (func_num_args() >= 5) {
+            $definition->default($default);
+        }
+
+        return $definition;
+    }
+
     /** Add a text column. */
     public function text(string $column, bool $nullable = true): ColumnDefinition
     {
@@ -193,6 +212,22 @@ class Blueprint
     public function uuidPrimary(string $column = 'id'): ColumnDefinition
     {
         return $this->uuid($column, true);
+    }
+
+    /** Add a DATE column definition. */
+    public function date(string $column, bool $nullable = false, mixed $default = null): ColumnDefinition
+    {
+        $definition = $this->addColumnDefinition($column, 'DATE');
+
+        if ($nullable) {
+            $definition->nullable();
+        }
+
+        if (func_num_args() >= 3) {
+            $definition->default($default);
+        }
+
+        return $definition;
     }
 
     /** Add a timestamp column optionally allowing null/default values. */
@@ -385,14 +420,15 @@ class Blueprint
                 if ($column instanceof ColumnDefinition) {
                     $definitions[] = $column->toSql();
                     if ($foreign = $column->compileForeignKey()) {
-                        $definitions[] = $foreign;
+                        $this->tableConstraints[] = $foreign;
                     }
-                } else {
-                    $definitions[] = $column;
+                    continue;
                 }
+
+                $definitions[] = $column;
             }
 
-            $definitions = array_merge($definitions, $this->indexes);
+            $definitions = array_merge($definitions, $this->tableConstraints, $this->indexes);
             $columns = implode(",
 ", $definitions);
 

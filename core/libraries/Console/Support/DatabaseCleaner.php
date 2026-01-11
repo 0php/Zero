@@ -34,27 +34,29 @@ final class DatabaseCleaner
      */
     private static function dropMysqlTables(): array
     {
-        $tables = Database::fetch('SHOW FULL TABLES WHERE Table_type = "BASE TABLE"');
+        $db = Database::write();
+        $tables = $db->fetch('SHOW FULL TABLES WHERE Table_type = "BASE TABLE"');
         if (empty($tables)) {
             return [];
         }
 
-        Database::query('SET FOREIGN_KEY_CHECKS=0');
-
-        $dropped = [];
+        $names = [];
         foreach ($tables as $row) {
             $table = array_values($row)[0] ?? null;
-            if (!$table) {
-                continue;
+            if ($table) {
+                $names[] = '`' . str_replace('`', '``', (string) $table) . '`';
             }
-
-            Database::query(sprintf('DROP TABLE IF EXISTS `%s`', $table));
-            $dropped[] = (string) $table;
         }
 
-        Database::query('SET FOREIGN_KEY_CHECKS=1');
+        if (empty($names)) {
+            return [];
+        }
 
-        return $dropped;
+        $db->query('SET FOREIGN_KEY_CHECKS=0');
+        $db->query('DROP TABLE IF EXISTS ' . implode(', ', $names));
+        $db->query('SET FOREIGN_KEY_CHECKS=1');
+
+        return array_map(static fn ($name) => trim($name, '`'), $names);
     }
 
     /**

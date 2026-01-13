@@ -47,6 +47,8 @@ User::create($data);
 | Rule | Description |
 | --- | --- |
 | `required` | Field must be present and non-empty (arrays must contain at least one element). |
+| `accepted` | Accepts `true`, `1`, `"1"`, `"yes"`, `"on"`, or `"true"`. |
+| `sometimes` | Only validates the field if it is present in the input payload. |
 | `string` | Value must be a string when provided. |
 | `email` | Validates format using `FILTER_VALIDATE_EMAIL`. |
 | `boolean` | Accepts booleans, `0`/`1`, or string equivalents (`"true"`, `"false"`, `"on"`, `"off"`). |

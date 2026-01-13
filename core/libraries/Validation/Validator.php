@@ -6,6 +6,7 @@ namespace Zero\Lib\Validation;
 
 use Closure;
 use InvalidArgumentException;
+use Zero\Lib\Validation\Rules\Accepted;
 use Zero\Lib\Validation\Rules\ArrayRule;
 use Zero\Lib\Validation\Rules\BooleanRule;
 use Zero\Lib\Validation\Rules\Confirmed;
@@ -20,6 +21,7 @@ use Zero\Lib\Validation\Rules\Mimes;
 use Zero\Lib\Validation\Rules\Number;
 use Zero\Lib\Validation\Rules\Password;
 use Zero\Lib\Validation\Rules\Required;
+use Zero\Lib\Validation\Rules\Sometimes;
 use Zero\Lib\Validation\Rules\StringRule;
 use Zero\Lib\Validation\Rules\Unique;
 
@@ -105,6 +107,10 @@ final class Validator
     private function runValidation(): void
     {
         foreach ($this->parsedRules as $attribute => $rules) {
+            if ($this->hasRule($rules, 'sometimes') && !$this->dataHas($this->data, $attribute)) {
+                continue;
+            }
+
             $value = $this->dataGet($this->data, $attribute);
             $failed = false;
 
@@ -245,6 +251,39 @@ final class Validator
         return $target;
     }
 
+    private function dataHas(array $target, string $key): bool
+    {
+        if ($key === '' || $key === null) {
+            return true;
+        }
+
+        $segments = explode('.', $key);
+
+        foreach ($segments as $segment) {
+            if (!is_array($target) || !array_key_exists($segment, $target)) {
+                return false;
+            }
+
+            $target = $target[$segment];
+        }
+
+        return true;
+    }
+
+    /**
+     * @param array<int, RuleInterface|callable> $rules
+     */
+    private function hasRule(array $rules, string $name): bool
+    {
+        foreach ($rules as $rule) {
+            if ($rule instanceof RuleInterface && $rule->name() === $name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @param array<string, array<int, string>|string> $rules
      * @return array<string, array<int, RuleInterface|callable>>
@@ -284,6 +323,8 @@ final class Validator
 
         return match ($name) {
             'required' => new Required(),
+            'accepted' => new Accepted(),
+            'sometimes' => new Sometimes(),
             'string' => new StringRule(),
             'email' => new Email(),
             'min' => new Min($this->extractNumericParameter($name, $parameters)),

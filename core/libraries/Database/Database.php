@@ -167,14 +167,14 @@ class DatabaseConnection {
         } elseif (is_array($bind) && empty($params)) {
             foreach ($bind as $key => $value) {
                 if (is_numeric($key)) {
-                    $stmt->bindValue((int) $key + 1, $value);
+                    $this->bindValueWithType($stmt, (int) $key + 1, $value);
                 } else {
-                    $stmt->bindValue($key, $value);
+                    $this->bindValueWithType($stmt, $key, $value);
                 }
             }
         } elseif (is_array($params) && count($params) > 0) {
             foreach (array_values($params) as $index => $value) {
-                $stmt->bindValue($index + 1, $value);
+                $this->bindValueWithType($stmt, $index + 1, $value);
             }
         }
 
@@ -192,6 +192,26 @@ class DatabaseConnection {
             $stmt = $stmt->rowCount();
         }
         return $stmt;
+    }
+
+    private function bindValueWithType($statement, $key, $value): void
+    {
+        if (is_null($value)) {
+            $statement->bindValue($key, null, PDO::PARAM_NULL);
+            return;
+        }
+
+        if (is_bool($value)) {
+            $statement->bindValue($key, $value, PDO::PARAM_BOOL);
+            return;
+        }
+
+        if (is_int($value)) {
+            $statement->bindValue($key, $value, PDO::PARAM_INT);
+            return;
+        }
+
+        $statement->bindValue($key, $value);
     }
 
     public function fetch($query, $bind=null, $params=null, $debug=false) {

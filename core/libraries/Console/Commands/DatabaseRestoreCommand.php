@@ -107,7 +107,7 @@ final class DatabaseRestoreCommand implements CommandInterface
             putenv('MYSQL_PWD=' . $password);
         }
 
-        exec($command, $output, $exitCode);
+        $exitCode = $this->runCommand($command, $output);
 
         if ($password !== '') {
             if ($previous === false) {
@@ -162,7 +162,7 @@ final class DatabaseRestoreCommand implements CommandInterface
             putenv('PGPASSWORD=' . $password);
         }
 
-        exec($command, $output, $exitCode);
+        $exitCode = $this->runCommand($command, $output);
 
         if ($password !== '') {
             if ($previous === false) {
@@ -222,6 +222,37 @@ final class DatabaseRestoreCommand implements CommandInterface
     {
         fwrite(STDERR, sprintf('Database driver [%s] is not supported by db:restore.%s', $driver, PHP_EOL));
         return 1;
+    }
+
+    private function runCommand(string $command, ?array &$output = null): int
+    {
+        $output = [];
+
+        if (function_exists('exec')) {
+            exec($command, $output, $exitCode);
+            return $exitCode;
+        }
+
+        if (!function_exists('shell_exec')) {
+            fwrite(STDERR, 'Shell execution functions are disabled.' . PHP_EOL);
+            return 1;
+        }
+
+        $marker = '__ZERO_EXIT_CODE__';
+        $result = shell_exec($command . '; printf "\n' . $marker . '%s" $?');
+
+        if ($result === null) {
+            fwrite(STDERR, 'Shell execution failed.' . PHP_EOL);
+            return 1;
+        }
+
+        $parts = explode("\n" . $marker, $result, 2);
+        $outputText = $parts[0] ?? '';
+        $exitCode = (int) ($parts[1] ?? 1);
+
+        $output = $outputText === '' ? [] : preg_split("/\r\n|\n|\r/", rtrim($outputText));
+
+        return $exitCode;
     }
 
     private function normalisePath(string $path): string

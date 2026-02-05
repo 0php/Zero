@@ -16,8 +16,10 @@ class Router
 {
     private static array $routes = [];
     private static array $middlewares = [];
+    private static array $domains = [];
     private static string $prefix = '';
     private static array $groupMiddlewares = [];
+    private static ?array $groupDomains = null;
     private static string $namePrefix = '';
     private static array $namedRoutes = [];
 
@@ -28,12 +30,25 @@ class Router
     {
         $previousPrefix = self::$prefix;
         $previousMiddlewares = self::$groupMiddlewares;
+        $previousDomains = self::$groupDomains;
         $previousNamePrefix = self::$namePrefix;
 
         self::$prefix .= $attributes['prefix'] ?? '';
         if (isset($attributes['middleware'])) {
             $middlewares = self::normalizeMiddlewareList($attributes['middleware']);
             self::$groupMiddlewares = array_merge(self::$groupMiddlewares, $middlewares);
+        }
+
+        $domainAttributes = self::normalizeDomainAttributes($attributes);
+        if ($domainAttributes !== null) {
+            if (self::$groupDomains !== null) {
+                $domainAttributes = array_values(array_intersect(self::$groupDomains, $domainAttributes));
+                if ($domainAttributes === []) {
+                    throw new InvalidArgumentException('Domain group resulted in an empty intersection.');
+                }
+            }
+
+            self::$groupDomains = $domainAttributes;
         }
 
         if (isset($attributes['name'])) {
@@ -48,6 +63,7 @@ class Router
 
         self::$prefix = $previousPrefix;
         self::$groupMiddlewares = $previousMiddlewares;
+        self::$groupDomains = $previousDomains;
         self::$namePrefix = $previousNamePrefix;
     }
 
@@ -65,12 +81,15 @@ class Router
 
         $normalizedMiddlewares = self::normalizeMiddlewareList($middlewares);
         $allMiddlewares = array_merge(self::$groupMiddlewares, $normalizedMiddlewares);
+        $domains = self::$groupDomains;
 
         self::$routes[$method][$fullRoute] = [
             'action' => $action,
             'name' => null,
+            'domains' => $domains,
         ];
         self::$middlewares[$method][$fullRoute] = $allMiddlewares;
+        self::$domains[$method][$fullRoute] = $domains ?? [];
 
         return new RouteDefinition($method, $fullRoute, self::$namePrefix);
     }
@@ -101,6 +120,14 @@ class Router
     }
 
     /**
+     * Create a domain-scoped route group.
+     */
+    public static function domain(string|array $domains): DomainRouteGroup
+    {
+        return new DomainRouteGroup(self::normalizeDomains($domains));
+    }
+
+    /**
      * Dispatch the current request and return a response instance.
      */
     public static function dispatch(string $requestUri, string $requestMethod): Response
@@ -109,46 +136,78 @@ class Router
         $requestUri = trim($requestUri, '/');
         $method = strtoupper($requestMethod);
         $routes = self::$routes[$method] ?? [];
+        $host = self::resolveRequestHost($request);
 
-        foreach ($routes as $route => $definition) {
-            try {
-        $pattern = self::compileRouteToRegex($route);
+        $attemptDispatch = function (string $uri) use ($routes, $method, $requestMethod, $host): ?Response {
+            foreach ($routes as $route => $definition) {
+                try {
+                    $allowedDomains = $definition['domains'] ?? null;
 
-                if (preg_match($pattern, $requestUri, $matches)) {
-                    $parameters = self::extractRouteParameters($matches);
-
-                    $middlewareResponse = self::validateMiddlewares($route, $method);
-                    if ($middlewareResponse instanceof Response) {
-                        return $middlewareResponse;
+                    if (!self::matchesDomain($allowedDomains, $host)) {
+                        continue;
                     }
 
-                    $result = self::callAction($definition['action'], $parameters);
+                    $pattern = self::compileRouteToRegex($route);
 
-                    return Response::resolve($result);
-                }
-            } catch (Throwable $e) {
-                $debug = filter_var(env('APP_DEBUG', 'false'), FILTER_VALIDATE_BOOL);
+                    if (preg_match($pattern, $uri, $matches)) {
+                        $parameters = self::extractRouteParameters($matches);
 
-                Log::error('Error processing route', [
-                    'route' => $route,
-                    'method' => $requestMethod,
-                    'message' => $e->getMessage(),
-                ]);
+                        $middlewareResponse = self::validateMiddlewares($route, $method);
+                        if ($middlewareResponse instanceof Response) {
+                            return $middlewareResponse;
+                        }
 
-                if ($debug) {
-                    throw $e;
-                }
+                        $result = self::callAction($definition['action'], $parameters);
 
-                if (function_exists('zero_build_error_response')) {
-                    return zero_build_error_response(500, [
-                        'title' => 'Server Error',
-                        'message' => 'An unexpected issue occurred while processing the request.',
+                        return Response::resolve($result);
+                    }
+                } catch (Throwable $e) {
+                    $debug = filter_var(env('APP_DEBUG', 'false'), FILTER_VALIDATE_BOOL);
+
+                    Log::error('Error processing route', [
+                        'route' => $route,
+                        'method' => $requestMethod,
+                        'message' => $e->getMessage(),
                     ]);
-                }
 
-                return Response::json([
-                    'message' => 'An unexpected issue occurred while processing the request.',
-                ], 500);
+                    if ($debug) {
+                        throw $e;
+                    }
+
+                    if (function_exists('zero_build_error_response')) {
+                        return zero_build_error_response(500, [
+                            'title' => 'Server Error',
+                            'message' => 'An unexpected issue occurred while processing the request.',
+                        ]);
+                    }
+
+                    return Response::json([
+                        'message' => 'An unexpected issue occurred while processing the request.',
+                    ], 500);
+                }
+            }
+
+            return null;
+        };
+
+        $response = $attemptDispatch($requestUri);
+        if ($response instanceof Response) {
+            return $response;
+        }
+
+        if ($requestUri !== '') {
+            $segments = array_values(array_filter(explode('/', $requestUri), 'strlen'));
+            $locale = $segments[0] ?? '';
+
+            if ($locale !== '' && preg_match('/^[a-zA-Z]{2}$/', $locale)) {
+                Request::set('lang', $locale);
+                array_shift($segments);
+                $stripped = implode('/', $segments);
+                $response = $attemptDispatch($stripped);
+
+                if ($response instanceof Response) {
+                    return $response;
+                }
             }
         }
 
@@ -217,13 +276,81 @@ class Router
     private static function compileRouteToRegex(string $route): string
     {
         $routePattern = trim($route, '/');
-        $pattern = preg_replace_callback('/\{([a-zA-Z0-9_]+)(:[^}]+)?\}/', function (array $matches): string {
-            $name = $matches[1];
-            $custom = $matches[2] ?? null;
-            $regex = $custom !== null ? substr($custom, 1) : '[^/]+';
+        $length = strlen($routePattern);
+        $pattern = '';
 
-            return '(?P<' . $name . '>' . $regex . ')';
-        }, $routePattern);
+        for ($i = 0; $i < $length; $i++) {
+            $char = $routePattern[$i];
+
+            if ($char !== '{') {
+                $pattern .= $char;
+                continue;
+            }
+
+            $name = '';
+            $regex = '';
+            $i++;
+
+            while ($i < $length) {
+                $char = $routePattern[$i];
+
+                if ($char === ':' || $char === '}') {
+                    break;
+                }
+
+                $name .= $char;
+                $i++;
+            }
+
+            if ($name === '') {
+                $pattern .= '{';
+                $i--;
+                continue;
+            }
+
+            if ($i < $length && $routePattern[$i] === ':') {
+                $i++;
+                $depth = 0;
+
+                while ($i < $length) {
+                    $char = $routePattern[$i];
+
+                    if ($char === '\\' && $i + 1 < $length) {
+                        $regex .= $char . $routePattern[$i + 1];
+                        $i += 2;
+                        continue;
+                    }
+
+                    if ($char === '{') {
+                        $depth++;
+                        $regex .= $char;
+                        $i++;
+                        continue;
+                    }
+
+                    if ($char === '}') {
+                        if ($depth > 0) {
+                            $depth--;
+                            $regex .= $char;
+                            $i++;
+                            continue;
+                        }
+
+                        break;
+                    }
+
+                    $regex .= $char;
+                    $i++;
+                }
+            }
+
+            while ($i < $length && $routePattern[$i] !== '}') {
+                $i++;
+            }
+
+            $regex = $regex !== '' ? $regex : '[^/]+';
+            $pattern .= '(?P<' . $name . '>' . $regex . ')';
+        }
 
         return '#^' . $pattern . '(?:/)?$#';
     }
@@ -241,13 +368,7 @@ class Router
             }
         }
 
-        if (!empty($named)) {
-            return array_values($named);
-        }
-
-        unset($matches[0]);
-
-        return array_values($matches);
+        return $named;
     }
 
     /**
@@ -259,8 +380,13 @@ class Router
         $resolved = [];
         $routeValues = array_values($routeParameters);
         $index = 0;
+        $hasVariadic = false;
 
         foreach ($reflection->getParameters() as $parameter) {
+            if ($parameter->isVariadic()) {
+                $hasVariadic = true;
+            }
+
             $type = $parameter->getType();
 
             if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
@@ -277,6 +403,20 @@ class Router
                     $reflection->getDeclaringClass()->getName(),
                     $method
                 ));
+            }
+
+            $paramName = $parameter->getName();
+
+            if (array_key_exists($paramName, $routeParameters)) {
+                $value = $routeParameters[$paramName];
+                unset($routeParameters[$paramName]);
+
+                if ($type instanceof ReflectionNamedType && $type->isBuiltin()) {
+                    $value = self::castRouteParameter($value, $type->getName());
+                }
+
+                $resolved[] = $value;
+                continue;
             }
 
             if ($index < count($routeValues)) {
@@ -303,8 +443,10 @@ class Router
             ));
         }
 
-        while ($index < count($routeValues)) {
-            $resolved[] = $routeValues[$index++];
+        if ($hasVariadic) {
+            while ($index < count($routeValues)) {
+                $resolved[] = $routeValues[$index++];
+            }
         }
 
         return $resolved;
@@ -451,6 +593,131 @@ class Router
         return class_exists($value);
     }
 
+    /**
+     * Normalize domain attributes from group definitions.
+     */
+    private static function normalizeDomainAttributes(array $attributes): ?array
+    {
+        $values = [];
+        $hasDomains = false;
+
+        if (array_key_exists('domain', $attributes)) {
+            $hasDomains = true;
+            $values[] = $attributes['domain'];
+        }
+
+        if (array_key_exists('domains', $attributes)) {
+            $hasDomains = true;
+            $values[] = $attributes['domains'];
+        }
+
+        if (!$hasDomains) {
+            return null;
+        }
+
+        $flattened = [];
+        foreach ($values as $value) {
+            if (is_array($value)) {
+                $flattened = array_merge($flattened, $value);
+            } else {
+                $flattened[] = $value;
+            }
+        }
+
+        return self::normalizeDomains($flattened);
+    }
+
+    /**
+     * Normalize a domain list into lowercase hostnames.
+     */
+    private static function normalizeDomains(mixed $domains): array
+    {
+        if (is_string($domains)) {
+            $domains = [$domains];
+        }
+
+        if (!is_array($domains)) {
+            throw new InvalidArgumentException('Invalid domain configuration.');
+        }
+
+        $normalized = [];
+
+        foreach ($domains as $domain) {
+            if (!is_string($domain)) {
+                throw new InvalidArgumentException('Domain entries must be strings.');
+            }
+
+            $host = self::normalizeHost($domain);
+
+            if ($host === '') {
+                continue;
+            }
+
+            $normalized[] = $host;
+        }
+
+        $normalized = array_values(array_unique($normalized));
+
+        if ($normalized === []) {
+            throw new InvalidArgumentException('Domain list cannot be empty.');
+        }
+
+        return $normalized;
+    }
+
+    private static function normalizeHost(string $host): string
+    {
+        $host = trim(strtolower($host));
+
+        if ($host === '') {
+            return '';
+        }
+
+        if (str_contains($host, '://')) {
+            $parsed = parse_url($host);
+            if (is_array($parsed) && isset($parsed['host']) && is_string($parsed['host'])) {
+                $host = $parsed['host'];
+            }
+        }
+
+        $parsed = parse_url('//' . $host);
+        if (is_array($parsed) && isset($parsed['host']) && is_string($parsed['host'])) {
+            $host = $parsed['host'];
+        }
+
+        return trim(strtolower($host));
+    }
+
+    private static function resolveRequestHost(Request $request): string
+    {
+        $host = (string) $request->header('host', '');
+
+        if ($host === '') {
+            $host = (string) ($_SERVER['HTTP_HOST'] ?? ($_SERVER['SERVER_NAME'] ?? ''));
+        }
+
+        return self::normalizeHost($host);
+    }
+
+    private static function matchesDomain(?array $domains, string $host): bool
+    {
+        if ($domains === null) {
+            return true;
+        }
+
+        if ($host === '') {
+            return false;
+        }
+
+        foreach ($domains as $domain) {
+            if ($domain === $host) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function getRoutes(): array
     {
         $routes = [];
@@ -467,6 +734,7 @@ class Router
                     'uri' => $path,
                     'name' => $name,
                     'action' => $actionString,
+                    'domains' => $definition['domains'] ?? null,
                     'middleware' => array_map(
                         static fn ($entry) => self::stringifyMiddleware($entry),
                         $middleware
@@ -670,5 +938,25 @@ final class RouteDefinition
         Router::appendRouteMiddleware($this->method, $this->path, $middlewares);
 
         return $this;
+    }
+}
+
+final class DomainRouteGroup
+{
+    /**
+     * @param string[] $domains
+     */
+    public function __construct(private array $domains)
+    {
+    }
+
+    /**
+     * Register a route group constrained to the configured domains.
+     */
+    public function group(callable $callback, array $attributes = []): void
+    {
+        $attributes = array_merge($attributes, ['domains' => $this->domains]);
+
+        Router::group($attributes, $callback);
     }
 }

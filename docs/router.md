@@ -4,7 +4,7 @@ The router orchestrates HTTP traffic by mapping URIs to controller methods, exec
 
 ## Defining Routes
 
-Routes live in `routes/web.php` and use familiar HTTP verb helpers:
+Routes live in `routes/web.php` and use familiar HTTP verb helpers. You can call them through `Zero\Lib\Router` (or the `Route` alias if you prefer a Laravel-style API):
 
 ```php
 use Zero\Lib\Router;
@@ -92,6 +92,34 @@ Router::group(['prefix' => '/auth', 'name' => 'auth'], function () {
 ```
 
 The example above registers the `auth.login.show` and `auth.login.attempt` route names while still applying the `/auth` URI prefix.
+
+## Domain Routing
+
+You can scope route groups to one or more domains by providing a `domain` (single string) or `domains` (array) attribute:
+
+```php
+Router::group(['middleware' => [RoleMiddleware::class], 'name' => 'role', 'domains' => ['id.zero.local']], function () {
+    // Routes here only respond on id.zero.local
+});
+
+Router::group(['middleware' => [RoleMiddleware::class], 'name' => 'role', 'domain' => 'nl.zero.local'], function () {
+    // Routes here only respond on nl.zero.local
+});
+```
+
+There is also a fluent helper for domain groups:
+
+```php
+Router::domain(['id.zero.local', 'nl.zero.local'])->group(function () {
+    // Routes respond on either domain.
+});
+
+Router::domain('nl.zero.local')->group(function () {
+    // Routes respond only on nl.zero.local.
+});
+```
+
+Domain matching uses the request host header and ignores ports. Nested domain groups intersect (a child group can further narrow the allowed hosts).
 
 ## Named Routes and URL Generation
 

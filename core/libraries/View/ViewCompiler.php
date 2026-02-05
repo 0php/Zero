@@ -38,6 +38,20 @@ final class ViewCompiler
         $content = str_replace('@{{{', self::TRIPLE_PLACEHOLDER, $content);
         $content = str_replace('@{{', self::DOUBLE_PLACEHOLDER, $content);
 
+        $content = self::compileI18nBlocks($content);
+
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            'i18n',
+            fn(string $arguments) => "<?php \\Zero\\Lib\\I18n\\Translator::useFile({$arguments}); ?>"
+        );
+
+        $content = self::replaceDirectiveWithArguments(
+            $content,
+            't',
+            fn(string $arguments) => "<?php echo __({$arguments}); ?>"
+        );
+
         if ($options['enable_foreach']) {
             $content = self::compileForeachDirectives($content);
         }
@@ -191,6 +205,21 @@ final class ViewCompiler
     private static function compileRawEcho(string $expression): string
     {
         return "<?php echo {$expression}; ?>";
+    }
+
+    private static function compileI18nBlocks(string $content): string
+    {
+        $pattern = '/@i18n\\s*(\\((?:[^()]+|(?1))*\\))\\s*(.*?)@endi18n/s';
+
+        return preg_replace_callback($pattern, function (array $matches): string {
+            $arguments = substr($matches[1], 1, -1);
+            $payload = rtrim($matches[2]);
+            $label = 'ZERO_I18N_' . substr(md5($payload . $arguments), 0, 12);
+
+            $nowdoc = "<<<'{$label}'\n{$payload}\n{$label}\n";
+
+            return "<?php \\Zero\\Lib\\I18n\\Translator::registerInline({$arguments}, {$nowdoc}); ?>";
+        }, $content);
     }
 
     private static function replaceDirectiveWithArguments(

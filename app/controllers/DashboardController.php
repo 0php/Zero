@@ -13,7 +13,7 @@ class DashboardController
     /**
      * Render the dashboard view with the current user context.
      */
-    public function index()
+    public function index(?string $lang = null)
     {
         $request = Request::instance();
         $user = Auth::user();

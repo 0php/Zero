@@ -7,7 +7,7 @@ use Zero\Lib\Http\Response;
 
 class HomeController
 {
-    public function index()
+    public function index(?string $lang = null)
     {
         $request = Request::instance();
         return view('pages/home');

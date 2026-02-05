@@ -16,7 +16,7 @@ class AuthController
     /**
      * Display the login form.
      */
-    public function showLogin(): Response
+    public function showLogin(?string $lang = null): Response
     {
 
         if (Auth::user()) {
@@ -37,7 +37,7 @@ class AuthController
     /**
      * Handle an authentication attempt.
      */
-    public function login(Request $request): Response
+    public function login(Request $request, ?string $lang = null): Response
     {
         Session::remove('auth_errors');
         Session::remove('auth_old');
@@ -99,7 +99,7 @@ class AuthController
     /**
      * Destroy the authenticated session.
      */
-    public function logout(): Response
+    public function logout(?string $lang = null): Response
     {
         Auth::logout();
         Session::remove('auth_redirect');

@@ -10,6 +10,7 @@ $aliases = [
     'Model' => Zero\Lib\Model::class,
     'DBML' => Zero\Lib\DB\DBML::class,
     'Auth' => Zero\Lib\Auth\Auth::class,
+    'Route' => Zero\Lib\Router::class,
     'Mail' => Zero\Lib\Mail\Mailer::class,
     'Log' => Zero\Lib\Log::class,
     'Str' => Zero\Lib\Support\Str::class,
@@ -35,6 +36,14 @@ $helpers =  [
         ],
     ], [
         'path' => lib_path('Support/Helper.php'),
+        'cli' => true,
+        'http' => true,
+        'enabled' => [
+            'console' => true,
+            'http' => true,
+        ],
+    ], [
+        'path' => lib_path('I18n/Helper.php'),
         'cli' => true,
         'http' => true,
         'enabled' => [

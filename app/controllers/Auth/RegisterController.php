@@ -12,7 +12,7 @@ use Zero\Lib\Validation\ValidationException;
 
 class RegisterController
 {
-    public function show(): Response
+    public function show(?string $lang = null): Response
     {
         $status = Session::get('status');
         $errors = Session::get('register_errors') ?? [];
@@ -25,7 +25,7 @@ class RegisterController
         return view('auth/register', compact('status', 'errors', 'old'));
     }
 
-    public function store(Request $request): Response
+    public function store(Request $request, ?string $lang = null): Response
     {
         try {
             $data = $request->validate(

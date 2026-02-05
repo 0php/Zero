@@ -41,3 +41,15 @@
 ## Mailable
 
 - [ ] Create mailable custom services
+
+## I18n / Translation
+
+- [x] Add core i18n config (`config/i18n.php`) plus separate email translation config
+- [x] Implement locale resolver with ordered strategies (URL prefix, session/cookie, header, custom callback/DB)
+- [x] Add fallback locale chain (e.g., `en-GB` -> `en` -> default)
+- [x] Support YAML and JSON translation loaders
+- [x] Support inline `@i18n()` blocks in all templates (including child components)
+- [x] Support external translation files at `resources/i18n/{lang}/<page>` and explicit `@i18n('file-name')` selection
+- [x] Add translation helpers/aliases: `__()` and `@t()` with variable interpolation
+- [x] Define missing-key behavior (return original text)
+- [x] Document dot-notation and nested key access for YAML/JSON

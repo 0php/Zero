@@ -2,6 +2,7 @@
 namespace Zero\Lib;
 
 use Exception;
+use Zero\Lib\I18n\Translator;
 use Zero\Lib\View\ViewCompiler;
 
 class View
@@ -41,36 +42,43 @@ class View
             throw new Exception("View file {$viewFile} not found.");
         }
 
-        $compiledView = self::compileTemplate($viewPath, $viewFile);
+        $context = Translator::resolveContextForView($viewPath);
+        Translator::pushContext($context);
+        Translator::useView($viewPath, $context);
 
-        extract($data, EXTR_SKIP);
+        try {
+            $compiledView = self::compileTemplate($viewPath, $viewFile);
 
-        ob_start();
-        eval('?>' . $compiledView);
-        $output = ob_get_clean();
-
-        if (self::$layout) {
-            $layout = self::$layout;
-            $layoutFile = base('resources/views/' . $layout . '.php');
-
-            if (!file_exists($layoutFile)) {
-                throw new Exception("Layout file {$layoutFile} not found.");
-            }
-
-            $compiledLayout = self::compileTemplate('layout:' . $layout, $layoutFile);
-
-            if (self::$layoutData !== []) {
-                extract(self::$layoutData, EXTR_OVERWRITE);
-            }
+            extract($data, EXTR_SKIP);
 
             ob_start();
-            eval('?>' . $compiledLayout);
+            eval('?>' . $compiledView);
             $output = ob_get_clean();
+
+            if (self::$layout) {
+                $layout = self::$layout;
+                $layoutFile = base('resources/views/' . $layout . '.php');
+
+                if (!file_exists($layoutFile)) {
+                    throw new Exception("Layout file {$layoutFile} not found.");
+                }
+
+                $compiledLayout = self::compileTemplate('layout:' . $layout, $layoutFile);
+
+                if (self::$layoutData !== []) {
+                    extract(self::$layoutData, EXTR_OVERWRITE);
+                }
+
+                ob_start();
+                eval('?>' . $compiledLayout);
+                $output = ob_get_clean();
+            }
+
+            return $output;
+        } finally {
+            self::resetState();
+            Translator::popContext();
         }
-
-        self::resetState();
-
-        return $output;
     }
 
     /**
@@ -161,6 +169,8 @@ class View
         if (!file_exists($viewFile)) {
             throw new Exception("View file {$viewFile} not found.");
         }
+
+        Translator::useView($viewPath);
 
         if ($data !== []) {
             extract($data, EXTR_SKIP);

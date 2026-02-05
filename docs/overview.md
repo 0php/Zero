@@ -25,6 +25,7 @@ Zero Framework is a lightweight, native-PHP micro-framework inspired by Laravel'
 - Review [routing](router.md) to understand grouping, middleware, and parameter binding.
 - Dive into [DBML](dbml.md) for building SQL queries fluently.
 - Explore the [model layer](models.md) to work with active-record style objects.
+- Review [i18n/translation](i18n.md) to configure locales and load translations.
 - Configure database credentials with the [database connection guide](database-connections.md).
 - Review the [migrations guide](migrations.md) to learn how to shape tables, tweak charset/collation, and modify columns safely.
 - Review the [CLI tooling](cli.md) for scaffolding, migrations, and seeding workflows.

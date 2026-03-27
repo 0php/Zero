@@ -42,6 +42,11 @@ final class Message
      */
     private array $headers = [];
 
+    /**
+     * @var array<int, array{filename: string, content: string, contentType: string}>
+     */
+    private array $attachments = [];
+
     public function __construct(array $defaultFrom = [])
     {
         if (! empty($defaultFrom['address'])) {
@@ -132,6 +137,20 @@ final class Message
         return $this;
     }
 
+    public function attach(string $filename, string $content, string $contentType = 'application/octet-stream'): self
+    {
+        $filename = $this->sanitizeFilename($filename);
+        $contentType = trim($contentType) !== '' ? $contentType : 'application/octet-stream';
+
+        $this->attachments[] = [
+            'filename' => $filename,
+            'content' => $content,
+            'contentType' => $contentType,
+        ];
+
+        return $this;
+    }
+
     /**
      * @return array{address: string, name: string|null}|null
      */
@@ -196,6 +215,14 @@ final class Message
     }
 
     /**
+     * @return array<int, array{filename: string, content: string, contentType: string}>
+     */
+    public function getAttachments(): array
+    {
+        return $this->attachments;
+    }
+
+    /**
      * @return array<int, array{address: string, name: string|null}>
      */
     public function getEnvelopeRecipients(): array
@@ -213,8 +240,16 @@ final class Message
 
     public function toMimeString(): string
     {
-        $lines = $this->buildHeaderLines();
-        $body = $this->body === '' ? '' : $this->body;
+        if (empty($this->attachments)) {
+            $lines = $this->buildHeaderLines();
+            $body = $this->body === '' ? '' : $this->body;
+
+            return implode("\r\n", $lines) . "\r\n\r\n" . $body;
+        }
+
+        $boundary = $this->generateBoundary();
+        $lines = $this->buildHeaderLines($boundary);
+        $body = $this->buildMultipartBody($boundary);
 
         return implode("\r\n", $lines) . "\r\n\r\n" . $body;
     }
@@ -222,7 +257,7 @@ final class Message
     /**
      * @return array<int, string>
      */
-    private function buildHeaderLines(): array
+    private function buildHeaderLines(?string $boundary = null): array
     {
         $lines = [];
         $lines[] = 'Date: ' . $this->formatDate();
@@ -248,7 +283,11 @@ final class Message
         }
 
         $lines[] = 'MIME-Version: 1.0';
-        $lines[] = 'Content-Type: ' . $this->contentType;
+        if ($boundary !== null) {
+            $lines[] = 'Content-Type: multipart/mixed; boundary="' . $boundary . '"';
+        } else {
+            $lines[] = 'Content-Type: ' . $this->contentType;
+        }
         $lines[] = 'Content-Transfer-Encoding: 8bit';
 
         foreach ($this->headers as $name => $value) {
@@ -298,6 +337,14 @@ final class Message
         return str_replace("\n", "\r\n", $value);
     }
 
+    private function sanitizeFilename(string $filename): string
+    {
+        $filename = trim($filename);
+        $filename = preg_replace('/[\r\n]+/', '', $filename);
+
+        return $filename === '' ? 'attachment' : $filename;
+    }
+
     private function formatAddressList(array $addresses): string
     {
         $formatted = [];
@@ -341,5 +388,56 @@ final class Message
     private function formatDate(): string
     {
         return date(DATE_RFC2822);
+    }
+
+    private function generateBoundary(): string
+    {
+        return '=_Part_' . bin2hex(random_bytes(12));
+    }
+
+    private function buildMultipartBody(string $boundary): string
+    {
+        $parts = [];
+        $parts[] = $this->buildBodyPart($boundary);
+
+        foreach ($this->attachments as $attachment) {
+            $parts[] = $this->buildAttachmentPart($boundary, $attachment);
+        }
+
+        $parts[] = '--' . $boundary . '--';
+
+        return implode("\r\n", $parts);
+    }
+
+    private function buildBodyPart(string $boundary): string
+    {
+        $body = $this->body === '' ? '' : $this->body;
+
+        return implode("\r\n", [
+            '--' . $boundary,
+            'Content-Type: ' . $this->contentType,
+            'Content-Transfer-Encoding: 8bit',
+            '',
+            $body,
+        ]);
+    }
+
+    /**
+     * @param array{filename: string, content: string, contentType: string} $attachment
+     */
+    private function buildAttachmentPart(string $boundary, array $attachment): string
+    {
+        $filename = $this->sanitizeHeaderValue($attachment['filename']);
+        $contentType = $attachment['contentType'];
+        $encoded = chunk_split(base64_encode($attachment['content']), 76, "\r\n");
+
+        return implode("\r\n", [
+            '--' . $boundary,
+            'Content-Type: ' . $contentType . '; name="' . addcslashes($filename, '"\\') . '"',
+            'Content-Transfer-Encoding: base64',
+            'Content-Disposition: attachment; filename="' . addcslashes($filename, '"\\') . '"',
+            '',
+            rtrim($encoded, "\r\n"),
+        ]);
     }
 }

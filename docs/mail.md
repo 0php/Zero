@@ -34,7 +34,7 @@ Key options:
 
 ## Sending Mail
 
-Use the `Mail` facade (registered in `core/kernel.php`) to compose messages. The callback receives a `Zero\Lib\Mail\Message` instance with fluent helpers for addressing and content.
+Use the `Mail` facade (registered in `core/kernel.php`) to compose messages. The callback receives a `Zero\Lib\Mail\Message` instance with fluent helpers for addressing, headers, and content. The default `from` address is pulled from configuration, but you can override it per message.
 
 ```php
 use Mail;
@@ -43,6 +43,17 @@ Mail::send(function ($mail) {
     $mail->to('user@example.com', 'Test User')
          ->subject('Welcome to Zero Framework')
          ->html('<p>Thanks for signing up!</p>');
+});
+```
+
+### Override the From Address
+
+```php
+Mail::send(function ($mail) {
+    $mail->from('team@example.com', 'Support Team')
+         ->to('user@example.com')
+         ->subject('We updated your account')
+         ->text('Your preferences were updated successfully.');
 });
 ```
 
@@ -66,6 +77,44 @@ Mail::send(function ($mail) {
          ->replyTo('noreply@example.com')
          ->subject('Invoice #2024')
          ->html(view('emails.invoice', ['invoice' => $invoice]));
+});
+```
+
+### Attachments
+
+```php
+Mail::send(function ($mail) use ($pdfName, $pdfContents) {
+    $mail->to('customer@example.com')
+         ->subject('Invoice PDF')
+         ->html('<p>Your invoice is attached.</p>')
+         ->attach($pdfName, $pdfContents, 'application/pdf');
+});
+```
+
+### Custom Headers
+
+```php
+Mail::send(function ($mail) {
+    $mail->to('partner@example.com')
+         ->subject('Webhook verification')
+         ->header('X-Request-Id', $requestId)
+         ->header('X-Environment', app_env())
+         ->text('Verification payload attached.');
+});
+```
+
+### Multiple Recipients
+
+Each call to `to`, `cc`, or `bcc` appends a recipient, so you can chain or loop.
+
+```php
+Mail::send(function ($mail) use ($recipients) {
+    foreach ($recipients as $recipient) {
+        $mail->to($recipient['email'], $recipient['name'] ?? null);
+    }
+
+    $mail->subject('Weekly status')
+         ->text('Team, here is the weekly status update.');
 });
 ```
 
@@ -94,7 +143,7 @@ try {
 ## Limitations & Future Work
 
 - Only the SMTP driver is implemented; queues and local sendmail integrations are on the roadmap.
-- Attachments and multipart/alternative payloads are not yet supported.
+- Multipart/alternative payloads are not yet supported.
 - TLS verification defaults to secure settings—loosen them only for local development.
 
 Contributions are welcome! See `todo.md` for potential enhancements.

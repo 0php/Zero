@@ -28,7 +28,7 @@
 - [x] Break query builder into focused components (clauses, compilers, relations) under `Zero\\Lib\\DB`
 - [x] Extract router route collection and middleware pipeline into dedicated classes
 - [x] Restructure CLI commands into separate command classes with a dispatcher
-- [ ] Move helper utilities into grouped support modules (e.g., `Support/Arr`, `Support/Str`)
+- [x] Move helper utilities into grouped support modules (e.g., `Support/Arr`, `Support/Str`, `Support/Collection`, `Support/Number`)
 - [x] Introduce validation layer (validator factory, rule classes, request helpers)
 
 ## Error Handling

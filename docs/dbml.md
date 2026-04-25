@@ -1,213 +1,383 @@
 # DBML Query Builder
 
-Database Management Layer (DBML) is the fluent SQL builder that powers models, console helpers, and ad-hoc data scripts in Zero. It wraps the framework's PDO bridge, so the same chains work against MySQL, PostgreSQL, or SQLite without vendor conditionals.
+Database Management Layer (DBML) is the fluent SQL builder that powers models, console helpers, and ad-hoc data scripts. It wraps the framework's PDO bridge, so the same chains work against MySQL, PostgreSQL, or SQLite.
 
 ```php
 use Zero\Lib\DB\DBML;
+```
 
-$rows = DBML::table('users as u')
-    ->select('u.id', 'u.name', 'u.email')
-    ->where('u.active', 1)
-    ->orderByDesc('u.created_at')
-    ->limit(10)
+`DBML` extends `QueryBuilder`, so every builder method is available statically (`DBML::table(...)`) or fluently. Implementation: [`DBML.php`](../core/libraries/DB/DBML.php), [`QueryBuilder.php`](../core/libraries/DB/QueryBuilder.php), [`Concerns/HandlesWhereClauses.php`](../core/libraries/DB/Concerns/HandlesWhereClauses.php).
+
+---
+
+## Building a query
+
+### `DBML::table(string $table, ?string $alias = null): self`
+Start a new query.
+```php
+$users = DBML::table('users')->get();
+$u = DBML::table('users', 'u')->get();
+```
+
+### `->from(string $table, ?string $alias = null): self`
+Same as `table()`, fluent form.
+```php
+DBML::table('users')->from('archived_users')->get();
+```
+
+### `->select(string|array|DBMLExpression ...$columns): self`
+```php
+DBML::table('users')->select('id', 'email')->get();
+DBML::table('users')->select(['id', 'email'])->get();
+```
+
+### `->addSelect(string|array|DBMLExpression ...$columns): self`
+Append columns to the existing select list.
+```php
+DBML::table('users')->select('id')->addSelect('email')->get();
+```
+
+### `->selectRaw(string $expression, array $bindings = []): self`
+```php
+DBML::table('users')
+    ->selectRaw('COUNT(*) as total, ? as label', ['active'])
     ->get();
 ```
 
-## Selecting Columns
-
-- `select()` accepts strings, arrays, or `DBML::raw()` expressions.
-- `addSelect()` appends columns without resetting the previous selection.
-- `selectRaw()` records raw fragments while still binding parameters you pass alongside.
-
+### `DBML::raw(string $expression): DBMLExpression`
+Wrap a raw SQL fragment so it bypasses quoting.
 ```php
-$users = DBML::table('users')
-    ->select('id', 'name')
-    ->addSelect('email')
-    ->selectRaw('COUNT(*) over () as total_count')
+DBML::table('users')
+    ->select(DBML::raw('LOWER(email) AS email'))
     ->get();
 ```
 
-## Filtering Data
+---
 
-Builder methods compose WHERE clauses intuitively:
+## Joins
 
+### `->join(string $table, string $first, ?string $operator = null, ?string $second = null, string $type = 'INNER', ?string $alias = null): self`
 ```php
-$users = DBML::table('users')
-    ->where('status', 'active')
-    ->orWhere(fn ($query) =>
-        $query->whereBetween('age', [18, 25])
-              ->whereNull('deleted_at')
-    )
-    ->whereIn('country', ['US', 'CA'])
-    ->whereInSet('roles', ['author', 'editor']) // FIND_IN_SET style
-    ->when($request->input('q'), function ($query, $term) {
-        $query->where('name', 'LIKE', "%{$term}%");
-    })
+DBML::table('users')
+    ->join('posts', 'users.id', '=', 'posts.user_id')
+    ->select('users.*', 'posts.title')
     ->get();
 ```
 
-Convenience helpers include:
-
-- `whereAny($columns, $value)` / `orWhereAny()` – match the value against any column in the list.
-- `whereAnyLike($columns, $value, wildcard: 'both')` / `orWhereAnyLike()` – shorthand for multi-column LIKE checks.
-- `whereIn()`, `whereNotIn()`, `whereInSet()`, `whereBetween()`, `whereNull()`, and their `or...` variants.
-- `whereExists()` / `whereNotExists()` with nested queries via closures.
-- `whereNested(fn ($q) => ...)` and `when()` for clean conditional logic.
-
-## Joining Tables
-
+### `->leftJoin(string $table, string $first, ?string $operator = null, ?string $second = null, ?string $alias = null): self`
 ```php
-$posts = DBML::table('posts as p')
-    ->leftJoin('users as u', 'u.id', '=', 'p.user_id')
-    ->select('p.title', 'u.name as author')
-    ->orderBy('p.published_at', 'desc')
+DBML::table('users')
+    ->leftJoin('profiles', 'users.id', '=', 'profiles.user_id')
     ->get();
 ```
 
-Supported joins: `join()` (inner), `leftJoin()`, and `rightJoin()`. Provide aliases either inline (`'users as u'`) or via the optional arguments.
-
-## Grouping, Aggregates & Existence Checks
-
+### `->rightJoin(...)`
+Same shape as `leftJoin`.
 ```php
-$stats = DBML::table('orders')
-    ->select('status', DBML::raw('COUNT(*) as total'))
+DBML::table('a')->rightJoin('b', 'a.id', '=', 'b.a_id')->get();
+```
+
+---
+
+## Where clauses
+
+Provided by [`HandlesWhereClauses`](../core/libraries/DB/Concerns/HandlesWhereClauses.php). Two/three-arg forms supported throughout.
+
+### `->where($column, $operator = null, $value = null, string $boolean = 'AND'): self`
+```php
+DBML::table('users')->where('active', 1)->get();
+DBML::table('users')->where('age', '>', 18)->get();
+DBML::table('users')->where(['active' => 1, 'role' => 'admin'])->get();
+
+// Closure for grouped conditions
+DBML::table('users')->where(function ($q) {
+    $q->where('role', 'admin')->orWhere('role', 'owner');
+})->get();
+```
+
+### `->orWhere(...)`
+```php
+DBML::table('users')->where('role', 'admin')->orWhere('role', 'owner')->get();
+```
+
+### `->whereAny(...$args): self` / `->orWhereAny(...)`
+Match any of multiple columns.
+```php
+DBML::table('users')->whereAny(['name', 'email'], 'like', '%tofik%')->get();
+```
+
+### `->whereAnyLike(...)` / `->orWhereAnyLike(...)`
+Convenience for the `LIKE` variant of `whereAny`.
+```php
+DBML::table('users')->whereAnyLike(['name', 'email'], 'tofik')->get();
+```
+
+### `->whereNot(string $column, $value, $boolean = 'AND'): self` / `->orWhereNot(...)`
+```php
+DBML::table('users')->whereNot('active', 0)->get();
+```
+
+### `->whereIn(string $column, array $values, $boolean = 'AND', bool $not = false): self`
+```php
+DBML::table('users')->whereIn('id', [1, 2, 3])->get();
+```
+
+### `->whereNotIn(...)` / `->orWhereIn(...)` / `->orWhereNotIn(...)`
+```php
+DBML::table('users')->whereNotIn('status', ['deleted'])->get();
+```
+
+### `->whereInSet(string $column, array $values, $boolean = 'AND'): self`
+For comma-separated SET-style columns (MySQL `SET` / serialized lists).
+```php
+DBML::table('users')->whereInSet('roles', ['admin'])->get();
+```
+
+### `->whereNotInSet(...)` / `->orWhereInSet(...)` / `->orWhereNotInSet(...)`
+
+### `->whereBetween(string $column, array $values, $boolean = 'AND', bool $not = false): self`
+```php
+DBML::table('orders')->whereBetween('total', [100, 500])->get();
+```
+
+### `->whereNotBetween(...)` / `->orWhereBetween(...)` / `->orWhereNotBetween(...)`
+
+### `->whereNull(string $column, $boolean = 'AND', bool $not = false): self`
+```php
+DBML::table('users')->whereNull('deleted_at')->get();
+```
+
+### `->whereNotNull(...)` / `->orWhereNull(...)` / `->orWhereNotNull(...)`
+```php
+DBML::table('users')->whereNotNull('email_verified_at')->get();
+```
+
+### `->whereRaw(string $expression, array $bindings = [], $boolean = 'AND'): self`
+```php
+DBML::table('users')->whereRaw('LOWER(email) = ?', [$email])->get();
+```
+
+### `->whereExists(QueryBuilder $query, $boolean = 'AND'): self` / `->whereNotExists(...)` / `->orWhereExists(...)` / `->orWhereNotExists(...)`
+```php
+$sub = DBML::table('posts')->whereRaw('posts.user_id = users.id');
+DBML::table('users')->whereExists($sub)->get();
+```
+
+---
+
+## Ordering
+
+### `->orderBy(string|DBMLExpression $column, string $direction = 'ASC'): self`
+```php
+DBML::table('users')->orderBy('created_at', 'DESC')->get();
+```
+
+### `->orderByDesc(string|DBMLExpression $column): self`
+```php
+DBML::table('users')->orderByDesc('created_at')->get();
+```
+
+### `->orderByRaw(string $expression): self`
+```php
+DBML::table('users')->orderByRaw('LENGTH(name) ASC')->get();
+```
+
+---
+
+## Grouping & aggregates
+
+### `->groupBy(...$columns): self`
+```php
+DBML::table('orders')
+    ->select('status', DBML::raw('COUNT(*) AS total'))
     ->groupBy('status')
-    ->having('total', '>', 10)
     ->get();
-
-$totalUsers = DBML::table('users')->count();
-$firstEmail = DBML::table('users')->value('email');
-$emails = DBML::table('users')->pluck('email');
-$hasAdmins = DBML::table('users')->where('role', 'admin')->exists();
 ```
 
-### Ordering & Pagination
-
+### `->having($column, $operator = null, $value = null, $boolean = 'AND'): self`
 ```php
-$paginated = DBML::table('users')
-    ->orderByDesc('created_at')
-    ->paginate(perPage: 20, page: $currentPage);
-
-foreach ($paginated->items() as $user) {
-    // ...
-}
+DBML::table('orders')
+    ->select('user_id', DBML::raw('SUM(total) AS spent'))
+    ->groupBy('user_id')
+    ->having('spent', '>', 1000)
+    ->get();
 ```
 
-- `orderBy()`, `orderByDesc()`, and `orderByRaw()`.
-- `limit()`, `offset()`, `forPage()` for manual pagination.
-- `paginate()` issues a total count; `simplePaginate()` skips it for faster infinite-scroll views. Both return `Zero\Lib\Support\Paginator` with helpers (`items()`, `total()`, `perPage()`, `hasMorePages()`, ...).
-
-## Mutating Data
-
+### `->havingRaw(string $expression, array $bindings = [], $boolean = 'AND'): self`
 ```php
-DBML::table('users')->insert([
-    'name' => 'Ada Lovelace',
-    'email' => 'dev@zerophp.com',
+$query->havingRaw('SUM(total) > ?', [1000]);
+```
+
+---
+
+## Pagination & limits
+
+### `->limit(?int $value): self`
+```php
+DBML::table('users')->limit(10)->get();
+```
+
+### `->offset(?int $value): self`
+```php
+DBML::table('users')->offset(20)->limit(10)->get();
+```
+
+### `->forPage(int $page, int $perPage): self`
+Convenience: sets limit + offset for the requested page.
+```php
+DBML::table('users')->forPage(2, 15)->get();
+```
+
+### `->paginate(int $perPage = 15, int $page = 1): Paginator`
+Returns a `Paginator` with metadata.
+```php
+$page = DBML::table('users')->where('active', 1)->paginate(20, page: 2);
+$page->total();
+$page->lastPage();
+foreach ($page as $row) { /* ... */ }
+```
+
+### `->simplePaginate(int $perPage = 15, int $page = 1): Paginator`
+No total count — cheaper.
+```php
+$page = DBML::table('users')->simplePaginate(15);
+```
+
+---
+
+## Conditional chains
+
+### `->when(mixed $value, Closure $callback, ?Closure $default = null): self`
+Apply `$callback` only when `$value` is truthy.
+```php
+$q = DBML::table('users')
+    ->when($search, fn ($q) => $q->whereAnyLike(['name', 'email'], $search))
+    ->when($onlyActive, fn ($q) => $q->where('active', 1))
+    ->get();
+```
+
+---
+
+## Reading data
+
+### `->get(array|string|DBMLExpression $columns = []): array`
+```php
+$rows = DBML::table('users')->where('active', 1)->get();
+$rows = DBML::table('users')->get(['id', 'email']);
+```
+
+### `->first($columns = []): array|null`
+```php
+$user = DBML::table('users')->where('email', $email)->first();
+```
+
+### `->value(string $column): mixed`
+First row's column value.
+```php
+$email = DBML::table('users')->where('id', 42)->value('email');
+```
+
+### `->pluck(string $column, ?string $key = null): array`
+```php
+$emails = DBML::table('users')->pluck('email');                  // ['a@b', 'c@d']
+$emails = DBML::table('users')->pluck('email', 'id');            // [1 => 'a@b', 2 => 'c@d']
+```
+
+### `->exists(): bool`
+```php
+if (DBML::table('users')->where('email', $email)->exists()) { /* ... */ }
+```
+
+### `->count(string $column = '*'): int`
+```php
+$total = DBML::table('users')->where('active', 1)->count();
+```
+
+---
+
+## Writing data
+
+### `->insert(array $values): mixed`
+Insert one row (associative) or many rows (list of associatives). Returns the last insert id when applicable.
+```php
+$id = DBML::table('users')->insert([
+    'email' => 'a@b.test',
+    'name'  => 'A',
 ]);
 
-DBML::table('users')
-    ->where('id', $id)
-    ->update(['last_login_at' => now()]);
-
-DBML::table('sessions')
-    ->where('expired_at', '<', now())
-    ->delete();
+DBML::table('logs')->insert([
+    ['msg' => 'a'],
+    ['msg' => 'b'],
+]);
 ```
 
-- `insert()` accepts a single associative array or an array of rows; returns the last insert ID reported by the driver where available.
-- `update()` and `delete()` return the number of affected rows.
-- `updateOrCreate($attributes, $values)` finds a matching row (respecting prior constraints), updates it using the merged `$attributes + $values`, or inserts a new row and returns the resulting record as an associative array.
-- `findOrCreate($attributes, $values)` returns the first matching row or inserts one using the merged payload when nothing exists.
-- Wrap several statements in a transaction via the `Zero\Lib\Database` facade when you need atomic work.
-
-### Transactions
-
-Use the `DB` facade (or `Zero\Lib\Database`) to start, commit, and roll back a transaction. `DBML` exposes the same aliases if you prefer to keep everything in the query layer:
-
+### `->update(array $values): int`
+Returns the number of affected rows.
 ```php
-DB::startTransaction();
+$affected = DBML::table('users')
+    ->where('id', 42)
+    ->update(['name' => 'New Name']);
+```
 
+### `->delete(): int`
+Returns the number of deleted rows.
+```php
+$gone = DBML::table('logs')->where('created_at', '<', $cutoff)->delete();
+```
+
+### `->updateOrCreate(array $attributes, array $values = []): array`
+Find by `$attributes`, update or insert with `$values`. Returns the row.
+```php
+$row = DBML::table('users')->updateOrCreate(
+    ['email' => 'a@b.test'],
+    ['name' => 'A']
+);
+```
+
+### `->findOrCreate(array $attributes, array $values = []): array`
+Same as `updateOrCreate` but never updates an existing row.
+```php
+$row = DBML::table('users')->findOrCreate(['email' => 'a@b.test']);
+```
+
+---
+
+## Inspection
+
+### `->toSql(): string`
+```php
+$sql = DBML::table('users')->where('active', 1)->toSql();
+```
+
+### `->getBindings(): array`
+```php
+$bindings = DBML::table('users')->where('active', 1)->getBindings();
+```
+
+---
+
+## Transactions
+
+### `DBML::startTransaction(): void` / `DBML::commit(): void` / `DBML::rollback(): void`
+```php
+DBML::startTransaction();
 try {
-    DBML::table('orders')->insert([
-        'user_id' => $userId,
-        'total' => $total,
-    ]);
-
-    $balance = DBML::table('users')
-        ->where('id', $userId)
-        ->value('balance') ?? 0;
-
-    DBML::table('users')
-        ->where('id', $userId)
-        ->update(['balance' => $balance - $total]);
-
-    DB::commit();
-} catch (Throwable $e) {
-    DB::rollback();
+    DBML::table('orders')->insert($order);
+    DBML::table('order_items')->insert($items);
+    DBML::commit();
+} catch (\Throwable $e) {
+    DBML::rollback();
     throw $e;
 }
 ```
 
-If you call `startTransaction()` multiple times, the connection is shared until the outermost `commit()` or a `rollback()`.
+---
 
-The following aliases are equivalent:
+## DBML expressions
 
-```php
-DBML::startTransaction();
-DBML::commit();
-DBML::rollback();
-```
-
-## Raw Expressions & Debugging
+`DBML::raw($expr)` returns a `DBMLExpression` instance you can use anywhere a column or expression is accepted. The wrapper is recognized by all builder methods so it bypasses identifier quoting.
 
 ```php
-$query = DBML::table('orders')
-    ->select('id', DBML::raw('JSON_EXTRACT(meta, "$.tracking") as tracking'))
-    ->whereRaw('total > ?', [100]);
-
-$sql = $query->toSql();          // SELECT id, JSON_EXTRACT(...) FROM ...
-$bindings = $query->getBindings();
+$lower = DBML::raw('LOWER(email) AS email');
+DBML::table('users')->select($lower)->get();
 ```
-
-`DBML::raw()` lets you embed vendor-specific syntax while the builder still handles bindings everywhere else. `toSql()` reveals the generated SQL with placeholders and `getBindings()` exposes the values that will be bound at execution time.
-
-## Working Alongside Models
-
-`Zero\Lib\Model\Model` delegates to DBML under the hood. Use `Model::query()` for hydrated models and drop down to DBML whenever you need raw arrays or advanced constructs:
-
-```php
-use App\Models\User;
-
-$recent = User::query()
-    ->where('active', 1)
-    ->orderByDesc('created_at')
-    ->forPage(1, 10)
-    ->get();        // array of User instances
-
-$rawRows = User::query()->toBase()->get(); // underlying DBML builder
-
-// Upsert convenience: locate a user by email, update or create in one call
-$user = DBML::table('users')->updateOrCreate(
-    ['email' => 'dev@zerophp.com'],
-    ['name' => 'Ada Lovelace']
-); // identifying columns are merged with updates; returns an associative array
-
-// Retrieve or bootstrap a related profile with sensible defaults
-$profile = DBML::table('profiles')->findOrCreate(
-    ['user_id' => $user['id'] ?? null],
-    ['nickname' => 'adal']
-);
-```
-
-See the [Models guide](models.md) for relationship helpers, lifecycle hooks, and attribute utilities. For deeper internals inspect `core/libraries/DB/QueryBuilder.php`; the `DBML` facade simply forwards to that class.
-
-## Feature Checklist
-
-- Fluent, chainable API for SELECT / INSERT / UPDATE / DELETE.
-- Rich filtering: nested closures, multi-column helpers, `whereIn`, `whereBetween`, `whereNull`, `whereExists`, and conditionally applied clauses via `when()`.
-- Join support with alias handling and automatic identifier quoting.
-- Aggregation helpers (`count`, `exists`, `value`, `pluck`) and HAVING support.
-- Pagination primitives plus ready-to-use paginator objects.
-- Debug tooling via `toSql()` and `getBindings()`.
-
-DBML stays intentionally small—no global state, no magic. Compose precise SQL with predictable behaviour, and reach for models only when you want higher-level conveniences.

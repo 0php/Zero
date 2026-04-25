@@ -87,6 +87,142 @@ $schedule->command('app:test', ['--type=every-three-minutes'])
 
 Chain additional helpers (`everySixHours()`, `daysOfWeek()`, etc.) to exercise the combinations you rely on. Remove the block once you finish testing.
 
+## Schedule API
+
+```php
+use Zero\Lib\Console\Scheduling\Schedule;
+```
+
+Each task is registered with `$schedule->command(...)` or `$schedule->call(...)`, then chained with cadence + filter helpers.
+
+### Defining tasks
+
+#### `$schedule->command(string $signature, array $args = []): Event`
+Schedule a CLI command.
+```php
+$schedule->command('emails:dispatch')->everyFiveMinutes();
+$schedule->command('app:test', ['--type=manual'])->everyMinute();
+```
+
+#### `$schedule->call(callable $callback, ?string $description = null): Event`
+Schedule any closure / invokable.
+```php
+$schedule->call(fn () => cache_clear())->dailyAt('02:00');
+```
+
+### Cadence helpers
+
+Every helper returns the `Event`, so you can keep chaining.
+
+#### Minute-level
+```php
+$schedule->command('a')->everyMinute();
+$schedule->command('a')->everyTwoMinutes();
+$schedule->command('a')->everyThreeMinutes();
+$schedule->command('a')->everyFiveMinutes();
+$schedule->command('a')->everyTenMinutes();
+$schedule->command('a')->everyFifteenMinutes();
+$schedule->command('a')->everyThirtyMinutes();
+$schedule->command('a')->everyMinutes(7);   // every 7 minutes
+```
+
+#### Hour-level
+```php
+$schedule->command('a')->hourly();
+$schedule->command('a')->hourlyAt(15);          // every hour at :15
+$schedule->command('a')->everyHours(2);         // every 2 hours, on the hour
+$schedule->command('a')->everyHours(2, 30);     // every 2 hours at :30
+$schedule->command('a')->everySixHours(10);
+$schedule->command('a')->everyTwelveHours();
+$schedule->command('a')->twiceDaily(1, 13);     // 01:00 and 13:00
+```
+
+#### Day-level
+```php
+$schedule->command('a')->daily();
+$schedule->command('a')->dailyAt('00:30');
+$schedule->command('a')->weekdays('09:00');
+$schedule->command('a')->weekends('10:00');
+```
+
+#### Week-level
+```php
+$schedule->command('a')->weekly();                    // Mondays 00:00
+$schedule->command('a')->weeklyOn(0, '09:00');        // Sundays 09:00
+$schedule->command('a')->sunday();                    // Sun 00:00
+$schedule->command('a')->monday();
+$schedule->command('a')->tuesday();
+$schedule->command('a')->wednesday();
+$schedule->command('a')->thursday();
+$schedule->command('a')->friday();
+$schedule->command('a')->saturday();
+```
+
+#### Month / year
+```php
+$schedule->command('a')->monthly();                    // 1st 00:00
+$schedule->command('a')->monthlyOn(15, '02:00');       // 15th at 02:00
+$schedule->command('a')->quarterly('03:00');           // Jan/Apr/Jul/Oct 1st 03:00
+$schedule->command('a')->yearly('00:00');              // Jan 1 00:00
+```
+
+### Filter helpers
+
+Stack these on top of a cadence to narrow execution.
+
+#### `daysOfWeek(int ...$days)` — Sun=0..Sat=6
+```php
+$schedule->command('reports:sync')->hourlyAt(5)->daysOfWeek(1, 2, 3, 4, 5);
+```
+
+#### `datesOfMonth(int ...$dates)` — 1..31
+```php
+$schedule->command('finance:statements')->dailyAt('02:00')->datesOfMonth(1, 15);
+```
+
+#### `months(int ...$months)` — 1..12
+```php
+$schedule->command('audit')->monthly()->months(1, 4, 7, 10);
+```
+
+#### `hours(int ...$hours)` / `minutes(int ...$minutes)`
+```php
+$schedule->command('a')->everySixHours()->hours(0, 6, 12, 18);
+$schedule->command('a')->hourly()->minutes(15, 45);
+```
+
+### Concurrency & metadata
+
+#### `withoutOverlapping(?int $expiresAfter = null): Event`
+Skip the run if the previous one is still going. Optional file-lock TTL in seconds.
+```php
+$schedule->command('reports:sync')->hourly()->withoutOverlapping();
+$schedule->command('reports:sync')->hourly()->withoutOverlapping(900);
+```
+
+#### `mutexName(string $name): Event`
+Share a lock key across multiple events.
+```php
+$schedule->command('a')->hourly()->withoutOverlapping()->mutexName('reports');
+$schedule->command('b')->hourly()->withoutOverlapping()->mutexName('reports');
+```
+
+#### `description(string $text): Event`
+```php
+$schedule->command('a')->daily()->description('Nightly clean-up');
+```
+
+### Raw cron expressions
+
+#### `cron(string $expression): Event`
+Five fields: `minute hour day-of-month month day-of-week`. Supports lists (`1,15`), ranges (`1-5`), steps (`*/10`), month/weekday aliases (`jan`, `mon`, …), and `?`.
+```php
+$schedule->command('a')->cron('0 9 ? * mon-fri');   // 09:00 weekdays
+$schedule->command('a')->cron('*/10 * * * *');      // every 10 minutes
+```
+
+---
+
 ## Building Your Schedule
 
 - Keep tasks idempotent so a run that fires twice in the same window does not produce duplicate side effects.

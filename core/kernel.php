@@ -14,6 +14,9 @@ $aliases = [
     'Mail' => Zero\Lib\Mail\Mailer::class,
     'Log' => Zero\Lib\Log::class,
     'Str' => Zero\Lib\Support\Str::class,
+    'Arr' => Zero\Lib\Support\Arr::class,
+    'Collection' => Zero\Lib\Support\Collection::class,
+    'Number' => Zero\Lib\Support\Number::class,
     'Validator' => Zero\Lib\Validation\Validator::class,
 ];
 

@@ -1,6 +1,118 @@
 # Storage
 
-Zero Framework ships with a light filesystem abstraction that keeps uploads, generated assets, and cached artefacts in one place. The `Zero\\Lib\\Storage\\Storage` facade resolves a configured disk (default `public`) and proxies basic file operations to the underlying driver.
+A filesystem abstraction for uploads, generated assets, and cached artefacts. The `Zero\Lib\Storage\Storage` facade resolves a configured disk (default `public`) and proxies operations to the underlying driver.
+
+```php
+use Zero\Lib\Storage\Storage;
+```
+
+Implementation: [`Storage.php`](../core/libraries/Storage/Storage.php), [`StorageManager.php`](../core/libraries/Storage/StorageManager.php), drivers under [`Drivers/`](../core/libraries/Storage/Drivers/).
+
+---
+
+## API reference
+
+### `Storage::disk(?string $name = null): object`
+Get a disk by name (or the default when `null`). Drivers expose `put`, `get`, `exists`, `delete`, `files`, `url`, etc.
+```php
+$default = Storage::disk();
+$s3      = Storage::disk('s3');
+```
+
+### `Storage::put(string $path, string|File $contents, ?string $disk = null): string`
+Write contents to `$path`. Returns the stored path.
+```php
+Storage::put('reports/today.csv', $csv);
+Storage::put('avatars/' . $user->id . '.png', $bytes, disk: 'public');
+```
+
+You can also pass an `UploadedFile` / `File` directly:
+```php
+$avatar = $request->file('avatar');
+$path   = Storage::put('avatars/' . $user->id . '.png', $avatar);
+```
+
+### `Storage::putFile(string $path, File $file, ?string $disk = null): string`
+Store a `File` instance under a directory; the filename is derived from the file.
+```php
+$path = Storage::putFile('avatars', $avatar);
+```
+
+### `Storage::putFileAs(string $path, File $file, string $name, ?string $disk = null): string`
+Store a `File` under an explicit name.
+```php
+$path = Storage::putFileAs('avatars', $avatar, 'user-' . $user->id . '.png');
+```
+
+### `Storage::get(string|File $path, ?string $disk = null): string`
+Read raw bytes.
+```php
+$bytes = Storage::get('reports/today.csv');
+```
+
+### `Storage::exists(string $path, ?string $disk = null): bool`
+```php
+if (Storage::exists($path)) { /* ... */ }
+```
+
+### `Storage::files(string $directory = '', bool $recursive = false, ?string $disk = null): array`
+List files under a directory.
+```php
+$today = Storage::files('reports/' . date('Y-m-d'));
+$all   = Storage::files('reports', recursive: true);
+```
+
+### `Storage::url(string $path, ?string $disk = null): string`
+Build a public URL for the path.
+```php
+$src = Storage::url('avatars/' . $user->id . '.png');
+```
+
+### `Storage::temporaryUrl(string $path, \DateTimeInterface|int $expiration, ?string $disk = null): string`
+Signed/expiring URL (driver-dependent — primarily for S3).
+```php
+$url = Storage::temporaryUrl('private/report.pdf', now()->addMinutes(10));
+```
+
+### `Storage::response(string $path, ?string $disk = null, array $options = []): Response`
+Stream the file as an HTTP response.
+```php
+return Storage::response('exports/users.csv', options: [
+    'name'        => 'users.csv',
+    'disposition' => 'attachment',
+]);
+```
+
+### `Storage::__callStatic($name, $args)`
+Any other method (`delete`, `size`, `lastModified`, `copy`, `move`, …) is forwarded to the default disk.
+```php
+Storage::delete('avatars/old.png');
+Storage::copy('a.png', 'b.png');
+Storage::move('tmp/x.png', 'final/x.png');
+$size = Storage::size('reports/today.csv');
+$ts   = Storage::lastModified('reports/today.csv');
+```
+
+---
+
+## Working with uploaded files
+
+```php
+public function upload(Request $request)
+{
+    $file = $request->file('avatar');
+
+    $path = $file->store('avatars');                 // unique name
+    // or
+    $path = $file->storeAs('avatars', $user->id . '.png');
+
+    return ['url' => Storage::url($path)];
+}
+```
+
+`$file->store()` and `->storeAs()` use the default disk; pass the disk name as a second argument to switch.
+
+---
 
 ## Configuration
 

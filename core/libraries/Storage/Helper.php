@@ -18,8 +18,14 @@ if(!function_exists('base')) {
  */
 
 if(!function_exists('view_path')) {
-    function viewpath($path = '') {
+    function view_path($path = '') {
         return base('/resources/views/' . $path);
+    }
+}
+
+if(!function_exists('viewpath')) {
+    function viewpath($path = '') {
+        return view_path($path);
     }
 }
 
@@ -102,5 +108,33 @@ if(!function_exists('lib_path')) {
 if(!function_exists('app_path')) {
     function app_path($path = '') {
         return base('/app/' . $path);
+    }
+}
+
+/**
+ * Resource Path
+ */
+
+if(!function_exists('resource_path')) {
+    function resource_path($path = '') {
+        return base('/resources/' . $path);
+    }
+}
+
+/**
+ * Database Path
+ */
+if(!function_exists('database_path')) {
+    function database_path($path = '') {
+        return base('/database/' . $path);
+    }
+}
+
+/**
+ * Translation/i18n resources path
+ */
+if(!function_exists('lang_path')) {
+    function lang_path($path = '') {
+        return resource_path('i18n/' . $path);
     }
 }

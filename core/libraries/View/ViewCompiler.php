@@ -38,6 +38,23 @@ final class ViewCompiler
         $content = str_replace('@{{{', self::TRIPLE_PLACEHOLDER, $content);
         $content = str_replace('@{{', self::DOUBLE_PLACEHOLDER, $content);
 
+        // Protect Zero.js HTML-attribute directives from being compiled as PHP directives.
+        // Zero.js directives appear as HTML attributes: @for="...", @if="...", @else, @scope="..."
+        // PHP directives appear standalone on lines: @foreach($items as $item), @if($x), @else
+        //
+        // Strategy: match @directive="value" and bare @else/@cloak inside HTML tags.
+        // We detect HTML-attribute context by looking for = or > or / immediately after the directive.
+        $zeroAttrs = [];
+        $content = preg_replace_callback(
+            '/(?<=\s)@(scope|foreach|for|if|elseif|else|show|model|ref|cloak|hydrate|key|data)(?=\s*=\s*"|(?:\s*>|\s*\/>|\s+[@:a-z]))/i',
+            function (array $m) use (&$zeroAttrs): string {
+                $key = '__ZERO_ATTR_' . count($zeroAttrs) . '__';
+                $zeroAttrs[$key] = '@' . $m[1];
+                return $key;
+            },
+            $content
+        );
+
         $content = self::compileI18nBlocks($content);
 
         $content = self::replaceDirectiveWithArguments(
@@ -167,6 +184,11 @@ final class ViewCompiler
 
             $content = preg_replace('/(?<!\\w)@php(?!\s*\()/m', '<?php', $content);
             $content = preg_replace('/(?<!\\w)@endphp(?!\\w)/m', '?>', $content);
+        }
+
+        // Restore Zero.js attribute directives
+        foreach ($zeroAttrs as $key => $original) {
+            $content = str_replace($key, $original, $content);
         }
 
         $content = str_replace(self::TRIPLE_PLACEHOLDER, '{{{', $content);

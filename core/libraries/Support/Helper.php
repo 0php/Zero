@@ -23,10 +23,6 @@ final class HelperRegistry
 
             $prop = $class->getProperty($property);
 
-            if (! $prop->isPublic()) {
-                $prop->setAccessible(true);
-            }
-
             try {
                 if (method_exists($prop, 'isInitialized') && $prop->isInitialized($object)) {
                     return $prop->getValue($object);
@@ -177,8 +173,13 @@ trait RegistersHelpers
 
 namespace {
 
+use Zero\Lib\Auth\Auth;
+use Zero\Lib\Http\Request;
 use Zero\Lib\Http\Response;
+use Zero\Lib\Log;
 use Zero\Lib\Router;
+use Zero\Lib\Session;
+use Zero\Lib\Support\Date;
 use Zero\Lib\View;
 
 if (!function_exists('response')) {
@@ -234,6 +235,246 @@ if (!function_exists('route')) {
     function route(string $name, array $parameters = [], bool $absolute = true): string
     {
         return Router::route($name, $parameters, $absolute);
+    }
+}
+
+if (!function_exists('redirect')) {
+    /**
+     * Build a redirect response. With no arguments, returns a 302 to the previous URL.
+     */
+    function redirect(?string $location = null, int $status = 302, array $headers = []): Response
+    {
+        if ($location === null) {
+            return Response::redirectBack('/', $status, $headers);
+        }
+
+        return Response::redirect($location, $status, $headers);
+    }
+}
+
+if (!function_exists('back')) {
+    /**
+     * Redirect to the previous URL (or fallback if no referer).
+     */
+    function back(string $fallback = '/', int $status = 302, array $headers = []): Response
+    {
+        return Response::redirectBack($fallback, $status, $headers);
+    }
+}
+
+if (!function_exists('request')) {
+    /**
+     * Access the current request, or read an input value when a key is given.
+     */
+    function request(?string $key = null, mixed $default = null): mixed
+    {
+        $request = Request::instance();
+
+        if ($key === null) {
+            return $request;
+        }
+
+        return Request::get($key, $default);
+    }
+}
+
+if (!function_exists('auth')) {
+    /**
+     * Access the Auth facade. Returns the current user when called with no arguments.
+     */
+    function auth(): mixed
+    {
+        return Auth::user();
+    }
+}
+
+if (!function_exists('session')) {
+    /**
+     * Read or write the session. Pass an array to set multiple keys at once.
+     */
+    function session(string|array|null $key = null, mixed $default = null): mixed
+    {
+        if ($key === null) {
+            return null;
+        }
+
+        if (is_array($key)) {
+            foreach ($key as $name => $value) {
+                Session::set($name, $value);
+            }
+            return null;
+        }
+
+        return Session::has($key) ? Session::get($key) : $default;
+    }
+}
+
+if (!function_exists('old')) {
+    /**
+     * Retrieve a value from previously flashed input.
+     */
+    function old(?string $key = null, mixed $default = null): mixed
+    {
+        $values = Session::get('old');
+
+        if (! is_array($values)) {
+            return $key === null ? ($values ?? $default) : $default;
+        }
+
+        if ($key === null) {
+            return $values;
+        }
+
+        return $values[$key] ?? $default;
+    }
+}
+
+if (!function_exists('logger')) {
+    /**
+     * Write a debug log entry, or return the Log class when no message is given.
+     */
+    function logger(?string $message = null, array $context = []): mixed
+    {
+        if ($message === null) {
+            return Log::class;
+        }
+
+        Log::debug($message, $context);
+
+        return null;
+    }
+}
+
+if (!function_exists('abort')) {
+    /**
+     * Throw an HTTP exception with the given status code.
+     */
+    function abort(int $status, string $message = '', array $headers = []): never
+    {
+        $exception = new \RuntimeException($message !== '' ? $message : ('HTTP ' . $status), $status);
+
+        if (function_exists('zero_http_error_response')) {
+            zero_http_error_response($status, [
+                'message' => $message,
+                'headers' => $headers,
+                'exception' => $exception,
+            ]);
+        }
+
+        throw $exception;
+    }
+}
+
+if (!function_exists('abort_if')) {
+    /**
+     * Abort with the given status code when the condition is truthy.
+     */
+    function abort_if(mixed $condition, int $status, string $message = '', array $headers = []): void
+    {
+        if ($condition) {
+            abort($status, $message, $headers);
+        }
+    }
+}
+
+if (!function_exists('abort_unless')) {
+    /**
+     * Abort with the given status code when the condition is falsy.
+     */
+    function abort_unless(mixed $condition, int $status, string $message = '', array $headers = []): void
+    {
+        if (! $condition) {
+            abort($status, $message, $headers);
+        }
+    }
+}
+
+if (!function_exists('url')) {
+    /**
+     * Build an absolute URL for a path within the application.
+     */
+    function url(string $path = '', array $query = []): string
+    {
+        $scheme = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? ($_ENV['APP_HOST'] ?? 'localhost');
+        $base = $scheme . '://' . $host;
+
+        $path = '/' . ltrim($path, '/');
+        $url = $base . $path;
+
+        if ($query !== []) {
+            $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($query);
+        }
+
+        return $url;
+    }
+}
+
+if (!function_exists('asset')) {
+    /**
+     * Build a URL for a public asset.
+     */
+    function asset(string $path): string
+    {
+        return url($path);
+    }
+}
+
+if (!function_exists('dump')) {
+    /**
+     * Pretty-print one or more values without halting execution.
+     */
+    function dump(mixed ...$values): void
+    {
+        foreach ($values as $value) {
+            echo PHP_SAPI === 'cli' ? '' : '<pre>';
+            var_dump($value);
+            echo PHP_SAPI === 'cli' ? '' : '</pre>';
+        }
+    }
+}
+
+if (!function_exists('now')) {
+    /**
+     * Get a Date instance representing the current moment.
+     */
+    function now(): Date
+    {
+        return Date::now();
+    }
+}
+
+if (!function_exists('today')) {
+    /**
+     * Get a Date instance representing the start of today.
+     */
+    function today(): Date
+    {
+        return Date::parse(date('Y-m-d'));
+    }
+}
+
+if (!function_exists('value')) {
+    /**
+     * Return the result of a closure, or the value itself if not callable.
+     */
+    function value(mixed $value, mixed ...$args): mixed
+    {
+        return $value instanceof \Closure ? $value(...$args) : $value;
+    }
+}
+
+if (!function_exists('tap')) {
+    /**
+     * Call a callback with the given value, then return the value.
+     */
+    function tap(mixed $value, ?callable $callback = null): mixed
+    {
+        if ($callback !== null) {
+            $callback($value);
+        }
+
+        return $value;
     }
 }
 

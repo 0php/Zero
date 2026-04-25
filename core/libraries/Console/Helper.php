@@ -306,7 +306,6 @@ if (!function_exists('_ddDump')) {
                         break;
                     }
 
-                    $property->setAccessible(true);
                     $visibility = $property->isPublic() ? 'public' : ($property->isProtected() ? 'protected' : 'private');
                     $label = _ddColor($colors, 'blue', $visibility) . ' ' . _ddColor($colors, 'yellow', '$' . $property->getName());
 

@@ -565,7 +565,6 @@ class Model implements JsonSerializable
             return; // Skip base no-op definitions
         }
 
-        $reflection->setAccessible(true);
         $reflection->invoke($this);
     }
 

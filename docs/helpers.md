@@ -1,6 +1,198 @@
 # Helpers
 
-Helpers let you expose reusable functionality as globally available functions that can be invoked from controllers, views, CLI scripts, or any other part of your application. They mirror Laravel-style helpers while remaining lightweight and explicit.
+Helpers in Zero come in two flavours:
+
+1. **Built-in global functions** — shipped with the framework, always available (path helpers, HTTP helpers, facade shortcuts, functional utilities). See the [reference table](#built-in-global-functions) below.
+2. **Application helpers** — custom classes you write under `App\Helpers`, registered via `RegistersHelpers`. The bulk of this document covers writing those.
+
+## Built-in global functions
+
+These are loaded by `core/kernel.php` and are always available in both HTTP and CLI contexts.
+
+### Path helpers
+
+All accept an optional sub-path argument and return an absolute path.
+
+| Function | Resolves to |
+| --- | --- |
+| `base($path = '')` | Project root (`BASE_PATH`) |
+| `app_path($path)` | `app/` |
+| `core_path($path)` | `core/` |
+| `lib_path($path)` | `core/libraries/` |
+| `config_path($path)` | `config/` |
+| `database_path($path)` | `database/` |
+| `resource_path($path)` | `resources/` |
+| `view_path($path)` | `resources/views/` (alias: `viewpath()`) |
+| `lang_path($path)` | `resources/i18n/` |
+| `public_path($path)` | `public/` |
+| `storage_path($path)` | `storage/` |
+| `cache_path($path)` | `storage/cache/` |
+| `log_path($path)` | `storage/logs/` |
+
+### HTTP & framework
+
+| Function | Purpose |
+| --- | --- |
+| `view($template, $data = [], $status = 200, $headers = [])` | Render a Blade-style view into an HTML `Response` |
+| `response($value = null, $status = 200, $headers = [])` | Build a `Response` from any value (string, array/object → JSON, etc.) |
+| `redirect($location = null, $status = 302, $headers = [])` | Build a redirect `Response`; with no location, redirects back |
+| `back($fallback = '/', $status = 302, $headers = [])` | Redirect to the previous URL |
+| `route($name, $parameters = [], $absolute = true)` | Resolve a named route URL |
+| `url($path = '', $query = [])` | Build an absolute URL using the current host |
+| `asset($path)` | URL for a public asset |
+| `request($key = null, $default = null)` | Current `Request` instance, or input value when `$key` given |
+| `auth()` | Current authenticated user (or `false`) |
+| `session($key = null, $default = null)` | Read/write the session (`array` form sets multiple keys) |
+| `old($key = null, $default = null)` | Retrieve flashed input |
+| `abort($status, $message = '', $headers = [])` | Throw an HTTP exception with the given status |
+| `abort_if($cond, $status, ...)` / `abort_unless($cond, $status, ...)` | Conditional aborts |
+| `logger($message = null, $context = [])` | Write a debug log entry, or get the `Log` class |
+| `dd(...$values)` | Pretty-dump and exit. Format adapts to the request: CLI prints an ANSI-coloured panel; HTTP requests with `Accept: application/json`, `Accept: */+json`, `Content-Type: application/json`, or `X-Requested-With: XMLHttpRequest` get a JSON dump (status 500); other HTTP requests get an HTML debug page. |
+| `dump(...$values)` | Pretty-dump without exiting |
+
+### Configuration & i18n
+
+| Function | Purpose |
+| --- | --- |
+| `config($key)` | Dot-notation read from `config/*.php` |
+| `env($key, $default = null)` | Read from `.env` (with override chain) |
+| `__($key, $replacements = [], $context = null, $locale = null)` | Translate a key |
+| `locale($context = null)` | Current locale |
+| `locales($context = null)` | Configured locales |
+| `set_locale($locale, $context = null, $persist = true)` | Switch locale at runtime |
+
+### Date & functional
+
+| Function | Purpose |
+| --- | --- |
+| `now()` | `Date` instance for the current moment |
+| `today()` | `Date` instance for the start of today |
+| `value($value, ...$args)` | Invoke if Closure, otherwise return as-is |
+| `tap($value, $cb = null)` | Run a side effect, return the value |
+
+### Support shortcuts
+
+| Function | Purpose |
+| --- | --- |
+| `collect($items = [])` | Build a `Collection` |
+| `str($value = null)` | Fluent `Stringable` (or returns the `Str` class when called with no args) |
+
+See [docs/support.md](support.md) for the full surface of `Str`, `Stringable`, `Arr`, `Collection`, and `Number`.
+
+### Examples
+
+Path helpers:
+
+```php
+base();                         // '/var/www/app'
+base('public/index.php');       // '/var/www/app/public/index.php'
+app_path('controllers');        // '/var/www/app/app/controllers'
+core_path('bootstrap.php');     // '/var/www/app/core/bootstrap.php'
+lib_path('Http');               // '/var/www/app/core/libraries/Http'
+config_path('mail.php');        // '/var/www/app/config/mail.php'
+database_path('migrations');    // '/var/www/app/database/migrations'
+resource_path('views');         // '/var/www/app/resources/views'
+view_path('home.php');          // '/var/www/app/resources/views/home.php'
+lang_path('en');                // '/var/www/app/resources/i18n/en'
+public_path('css/app.css');     // '/var/www/app/public/css/app.css'
+storage_path('cache');          // '/var/www/app/storage/cache'
+cache_path('views');            // '/var/www/app/storage/cache/views'
+log_path('app.log');            // '/var/www/app/storage/logs/app.log'
+```
+
+HTTP & framework:
+
+```php
+return view('users.show', ['user' => $user]);                  // HTML response
+return view('users.show', ['user' => $user], 200, ['X-A' => 'B']);
+
+return response('OK');                                          // text Response
+return response(['ok' => true], 201);                           // JSON Response
+return response($user);                                         // model → JSON
+
+return redirect('/login');                                      // 302
+return redirect();                                              // back to referer
+return back('/dashboard');                                      // back, fallback /dashboard
+
+route('users.show', ['id' => 42]);                              // '/users/42'
+route('users.show', ['id' => 42], absolute: true);              // 'http://x/users/42'
+
+url('search', ['q' => 'php']);                                  // 'http://x/search?q=php'
+asset('css/app.css');                                           // 'http://x/css/app.css'
+
+$req   = request();                                             // Request instance
+$email = request('email');                                      // input value
+$page  = request('page', 1);
+
+$user  = auth();                                                // current user (or false)
+
+session('flash.success');                                       // read
+session(['flash' => ['success' => 'Saved']]);                   // bulk write
+session('missing', 'fallback');                                 // with default
+
+old('email');                                                   // last submitted value
+old('email', '');
+
+abort(404);
+abort(403, 'Forbidden');
+abort_if(! $user->isAdmin(), 403);
+abort_unless($user, 401);
+
+logger('user signed in', ['id' => $user->id]);                  // log debug entry
+$logClass = logger();                                           // returns Log::class
+
+dd($user, $request->all());                                     // dump and exit
+dump($user);                                                    // dump, keep going
+```
+
+Configuration & i18n:
+
+```php
+config('view.cache_enabled');                                   // dot-notation
+config('mail.smtp.host');
+
+env('APP_ENV', 'production');                                   // .env value
+env('AUTH_TOKEN_TTL');
+
+__('common.welcome');                                           // translate
+__('greeting.hello', ['name' => 'Tofik']);
+
+locale();                                                       // 'en'
+locales();                                                      // ['en', 'id', 'fr']
+
+set_locale('id');                                               // persist via config
+set_locale('id', persist: false);                               // runtime only
+```
+
+Date & functional:
+
+```php
+now();                                                          // Date::now()
+now()->addDays(7);
+
+today();                                                        // start of today
+
+value(42);                                                      // 42
+value(fn () => expensive());                                    // calls Closure
+value($maybeClosure, $arg1, $arg2);                             // forwards args
+
+tap($user, fn ($u) => logger('saving', ['id' => $u->id]))->save();
+```
+
+Support shortcuts:
+
+```php
+collect([1, 2, 3])->sum();                                      // 6
+collect($users)->where('active', true)->pluck('email');
+
+(string) str('Hello {name}')->swap(['{name}' => 'World']);      // 'Hello World'
+(string) str('users.profile-photo')->replaceLast('.', '/');     // 'users/profile-photo'
+str();                                                          // returns Str::class
+```
+
+## Application helpers
+
+Application helpers let you expose reusable project-specific functionality as globally available functions that can be invoked from controllers, views, CLI scripts, or any other part of your application. They mirror Laravel-style helpers while remaining lightweight and explicit.
 
 ## Anatomy of a Helper
 

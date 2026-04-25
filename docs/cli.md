@@ -1,6 +1,12 @@
 # CLI Tooling
 
-The `zero` executable provides a light command-line interface for common development tasks.
+The `zero` executable provides a command-line interface for common development tasks. Each command is implemented as a class under [`core/libraries/Console/Commands/`](../core/libraries/Console/Commands/) and dispatched by [`Application.php`](../core/libraries/Console/Application.php).
+
+```bash
+php zero <command> [options...]
+php zero --help              # list all commands
+php zero <command> --help    # show usage for one command
+```
 
 ## Installation
 
@@ -9,6 +15,17 @@ The script ships with the repository; ensure it is executable:
 ```bash
 chmod +x zero
 ```
+
+## Command index
+
+| Group | Commands |
+| --- | --- |
+| Server | [`serve`](#serve-the-application) |
+| Generators | [`make:controller`](#generate-a-controller), [`make:service`](#generate-a-service), [`make:model`](#generate-a-model), [`make:middleware`](#generate-a-middleware), [`make:helper`](#generate-a-helper), [`make:logger`](#generate-a-logger), [`make:command`](#generate-a-console-command), [`make:migration`](#generate-a-migration), [`make:seeder`](#generate-a-seeder) |
+| Database | [`migrate`](#run-migrations), [`migrate:rollback`](#rollback-migrations), [`migrate:refresh`](#refresh-migrations), [`migrate:fresh`](#fresh-migrations), [`db:seed`](#run-a-seeder), [`db:dump`](#dump-the-database), [`db:restore`](#restore-the-database) |
+| App | [`key:generate`](#generate-app-key), [`route:list`](#inspect-registered-routes), [`storage:link`](#link-storage), [`log:clear`](#clear-log-files), [`schedule:run`](#run-scheduled-tasks) |
+
+---
 
 ## Commands
 
@@ -54,6 +71,14 @@ php zero make:command HealthCheck --signature=app:health
 
 Creates `app/console/Commands/HealthCheck.php` implementing the `CommandInterface`. The generator also ensures `app/console/Commands/Command.php` exists and appends the new command to its registration list so it is immediately available to the CLI. Provide `--description="..."` to customise the help text and `--force` to overwrite an existing command class.
 
+### Generate a Logger
+
+```bash
+php zero make:logger SlackLogger
+```
+
+Creates `app/loggers/SlackLogger.php` implementing `Zero\Lib\Log\LogHandlerInterface`. Use it to add custom destinations (Slack webhooks, third-party services, files) for the framework's logging facade. Pass `--force` to overwrite an existing logger class.
+
 ### Generate a Model
 
 ```bash
@@ -68,31 +93,38 @@ Creates `app/models/Post.php` extending the base `Zero\Lib\Model`. Use `--force`
 php zero make:migration create_users_table
 ```
 
-Creates a timestamped file in `database/migrations`. Each migration returns an anonymous class that extends `Zero\Lib\DB\Migration` with `up()` and `down()` methods.
+Creates a timestamped file in `database/migrations`. Each migration returns an anonymous class that extends `Zero\Lib\DB\Migration` with `up()` and `down()` methods. See [migrations.md](migrations.md) for the full schema-builder reference.
 
-Run outstanding migrations with:
+### Run Migrations
 
 ```bash
 php zero migrate
 ```
 
-Rollback the latest batch:
+Apply every outstanding migration in order. Each batch is recorded so it can be rolled back independently.
+
+### Rollback Migrations
 
 ```bash
-php zero migrate:rollback [steps]
+php zero migrate:rollback        # last batch only
+php zero migrate:rollback 3      # last 3 batches
 ```
 
-Reset the database by rolling back every batch and rerunning all migrations:
+### Refresh Migrations
 
 ```bash
 php zero migrate:refresh
 ```
 
-Drop every table (ignoring individual `down()` methods) before running migrations from scratch:
+Roll back every migration batch and re-run them — useful when iterating on schema changes during development.
+
+### Fresh Migrations
 
 ```bash
 php zero migrate:fresh
 ```
+
+Drop every table in the database (ignoring individual `down()` methods) and run all migrations from scratch. Faster than `migrate:refresh` when downs are slow or missing.
 
 Migrations leverage the lightweight schema builder:
 
@@ -126,11 +158,16 @@ Schema::table('users', function (Blueprint $table) {
 php zero make:seeder UsersTableSeeder
 ```
 
-Seeders extend `Zero\Lib\DB\Seeder` and live in `database/seeders`. Execute a seeder with:
+Seeders extend `Zero\Lib\DB\Seeder` and live in `database/seeders`.
+
+### Run a Seeder
 
 ```bash
-php zero db:seed Database\\Seeders\\UsersTableSeeder
+php zero db:seed                                          # runs DatabaseSeeder by default
+php zero db:seed Database\\Seeders\\UsersTableSeeder      # explicit FQCN
 ```
+
+The default `DatabaseSeeder` is expected at `database/seeders/DatabaseSeeder.php` — call sub-seeders from its `run()` method to chain multiple seed scripts.
 
 ### Generate a Middleware
 
@@ -180,6 +217,28 @@ php zero route:list
 
 Bootstraps `routes/web.php` and prints a table with the HTTP method, URI, route name (when available), controller action, and attached middleware stack. Use it to confirm route bindings after adding groups, name prefixes, or new controllers.
 
+### Generate App Key
+
+```bash
+php zero key:generate
+```
+
+Generates a base64-encoded random key and writes it to `.env` as `APP_KEY=base64:...`. The key is used for password hashing, JWT signing, and cookie encryption — keep it stable across deploys but never commit it to git. Re-running the command rotates the key (existing JWT cookies/sessions become invalid).
+
+### Run Scheduled Tasks
+
+```bash
+php zero schedule:run
+```
+
+Bootstraps `routes/cron.php` and executes every task whose cron expression matches the current minute. Wire it into your system's crontab once a minute:
+
+```cron
+* * * * * cd /var/www/app && php zero schedule:run >> /dev/null 2>&1
+```
+
+See [cron.md](cron.md) for task definitions.
+
 ### Update to Latest Release
 
 - Fetches a JSON manifest from the URL configured via `UPDATE_MANIFEST_URL`.
@@ -195,4 +254,31 @@ Stub templates live under `core/templates`. Adjust `controller.tmpl`, `service.t
 
 ## Extending the CLI
 
-Commands are dispatched from the `zero` script. New subcommands can be added by extending the `switch` statement and creating helper functions to encapsulate behaviour.
+Custom commands live under `app/console/Commands/`. The fastest path is `php zero make:command`, which generates a stub and registers it automatically:
+
+```bash
+php zero make:command HealthCheck --signature=app:health --description="Probe service health"
+```
+
+The generated class implements `CommandInterface`:
+
+```php
+namespace App\Console\Commands;
+
+use Zero\Lib\Console\Contracts\CommandInterface;
+
+class HealthCheck implements CommandInterface
+{
+    public function getName(): string         { return 'app:health'; }
+    public function getDescription(): string  { return 'Probe service health'; }
+    public function getUsage(): string        { return 'php zero app:health'; }
+
+    public function execute(array $argv): int
+    {
+        // ... your logic ...
+        return 0;
+    }
+}
+```
+
+`app/console/Commands/Command.php` (generated on first use) lists every custom command. The framework merges it with the built-in command set when the CLI boots.

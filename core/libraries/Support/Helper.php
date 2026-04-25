@@ -179,7 +179,10 @@ use Zero\Lib\Http\Response;
 use Zero\Lib\Log;
 use Zero\Lib\Router;
 use Zero\Lib\Session;
+use Zero\Lib\Support\Collection;
 use Zero\Lib\Support\Date;
+use Zero\Lib\Support\Str;
+use Zero\Lib\Support\Stringable;
 use Zero\Lib\View;
 
 if (!function_exists('response')) {
@@ -475,6 +478,29 @@ if (!function_exists('tap')) {
         }
 
         return $value;
+    }
+}
+
+if (!function_exists('collect')) {
+    /**
+     * Build a Collection from the given iterable.
+     */
+    function collect(mixed $items = []): Collection
+    {
+        return Collection::make($items === null ? [] : (is_iterable($items) ? $items : [$items]));
+    }
+}
+
+if (!function_exists('str')) {
+    /**
+     * Get a fluent Stringable instance, or return the Str class when called with no args.
+     */
+    function str(?string $value = null): Stringable|string
+    {
+        if ($value === null) {
+            return Str::class;
+        }
+        return Str::of($value);
     }
 }
 

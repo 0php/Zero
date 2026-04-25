@@ -1,166 +1,232 @@
-# View Layer
+# Views
 
-The Zero Framework view layer lets you render native PHP templates with a handful of Blade-inspired directives. Templates stay simple PHP files while gaining conveniences such as sections, layouts, and automatic HTML escaping.
-
-## Rendering Views
-
-Use the `view()` helper or `View::render()` to produce HTML from a template stored in `resources/views`.
-When you already have a template string (for example, a CMS snippet or email body), use `View::renderString()`.
+Native PHP templates with a handful of Blade-inspired directives. Files live under `resources/views/` and can opt into layouts, sections, includes, and view caching.
 
 ```php
-// In a controller or route callback
-return view('pages/home', [
-    'title' => 'Welcome home',
-    'posts' => Post::latest()->take(5)->get(),
-]);
+use Zero\Lib\View;
 ```
 
-Both helpers accept an array of data that is extracted into the template's scope. Keys are converted to variables (`$title`, `$posts`, …).
+Implementation: [`View.php`](../core/libraries/View/View.php), compiler at [`ViewCompiler.php`](../core/libraries/View/ViewCompiler.php).
 
-To render a template string:
+---
 
+## API reference
+
+### `View::render(string $view, array $data = []): string`
+Render a template. The view name is the path under `resources/views/`, with `/` or `.` as the separator. Returns the compiled HTML.
 ```php
-$html = View::renderString(
-    '<h1>{{ $title }}</h1><p>{!! $body !!}</p>',
-    ['title' => 'Hello', 'body' => $snippetHtml]
-);
+$html = View::render('pages.home', ['user' => $user]);
+$html = View::render('pages/home', ['user' => $user]); // equivalent
 ```
 
-Whenever you print data, prefer the escaped output directive `{{ $value }}`—it runs the expression through `htmlspecialchars`, keeping user-supplied content safe by default.
-
-### Layouts & Sections
-
-Add `@layout` at the top of a template to wrap it in a parent layout. Sections declared with `@section` / `@endsection` are later inserted with `@yield` inside the layout.
-
+Inside the template, every key in `$data` is available as a local variable:
 ```php
-// resources/views/layouts/app.php
-@include('components.head', ['title' => $title ?? 'Zero Framework'])
-
-    <main class="container py-5">
-        @yield('content')
-    </main>
-
-@include('components.footer')
+<!-- resources/views/pages/home.php -->
+<h1>Hello, <?= htmlspecialchars($user->name) ?></h1>
 ```
 
+In controllers prefer the global `view()` helper, which wraps `render()` in a `Response`:
 ```php
-// resources/views/pages/home.php
-@layout('layouts.app', ['title' => $title ?? 'Dashboard'])
+return view('pages.home', ['user' => $user]);
+```
 
-@section('content')
-    <h1 class="mb-4">{{ $title }}</h1>
+### `View::renderString(string $template, array $data = []): string`
+Render a Blade-style string template (no file lookup). Useful for emails compiled at runtime.
+```php
+$html = View::renderString('<h1>{{ $title }}</h1>', ['title' => 'Hi']);
+```
 
-    @foreach ($posts as $post)
-        <article class="mb-3">
-            <h2 class="h5 mb-1">{{ $post->title }}</h2>
-            <p class="mb-0">{!! $post->excerpt !!}</p>
-        </article>
-    @empty
-        <p class="text-muted">No posts yet. Check back soon!</p>
-    @endforeach
+### `View::include(string $view, array $data = []): void`
+Render a partial inline (echoes directly). Inside templates use the `@include('partials.header')` directive — `View::include()` is the runtime call it compiles to.
+```php
+View::include('partials.header', ['user' => $user]);
+```
+
+### `View::layout(string $layout, array $data = []): void`
+Set the parent layout for the current render. Usually invoked from inside a template via the `@layout('layouts.app')` directive.
+```php
+// inside a template
+@layout('layouts.app')
+```
+
+### `View::startSection(string $section): void` / `View::endSection(): void`
+Start / finish capturing a named section. Wired up via `@section(...)` / `@endsection`.
+```html
+@section('title')
+    Dashboard
 @endsection
 ```
 
-Layout data passed to `@layout` is extracted after the view data. This lets layout-specific variables (such as meta tags) override values defined within the view when necessary.
-
-## Including Partials
-
-Use `@include('path.to.partial', ['data' => $value])` to pull in reusable fragments. The path mirrors the filesystem under `resources/views`, using dots or slashes (`@include('components.alert')` maps to `resources/views/components/alert.php`).
-
-## Output & Escaping
-
-| Directive        | Description                                          |
-| ---------------- | ---------------------------------------------------- |
-| `{{ $value }}`   | Escapes the expression with `htmlspecialchars`.      |
-| `{!! $value !!}` | Outputs raw HTML without escaping — use sparingly.   |
-| `{{{ $value }}}` | Alias for raw output, kept for legacy compatibility. |
-
-Prefer the escaped `{{ }}` syntax to avoid XSS. Reserve raw output forms for trusted, pre-sanitised HTML snippets.
-
-## Control Structures
-
-The compiler understands a subset of Blade-style directives that compile directly to PHP:
-
-- Conditionals: `@if`, `@elseif`, `@else`, `@endif`
-- Loops: `@for`, `@endfor`, `@foreach`, `@endforeach`
-- Empty states: pair `@empty` inside an `@foreach` to render fallback content when the iterable has no items
-
-Example:
-
-```php
-@foreach ($comments as $comment)
-    <li>{{ $comment->body }}</li>
-@empty
-    <li class="text-muted">Be the first to comment.</li>
-@endforeach
+### `View::yieldSection(string $section): string`
+Output the captured section content. Used inside layouts via `@yield(...)`.
+```html
+<!-- resources/views/layouts/app.php -->
+<title>@yield('title')</title>
 ```
 
-Nested loops are supported and each `@empty` is scoped to its nearest `@foreach` block.
-
-## Running Arbitrary PHP
-
-For quick inline statements use `@php($counter++)`. For multi-line blocks, wrap the code with `@php ... @endphp`.
-
-```php
-@php($hasSidebar = count($widgets) > 0)
-
-@php
-    $timestamp = date('c');
-@endphp
-```
-
-## Legacy Static API
-
-Directives are syntactic sugar for the underlying `Zero\Lib\View` static helpers. You can mix and match both styles or fall back entirely to PHP if you prefer:
-
-```php
-<?php View::layout('layouts.app'); ?>
-
-<?php View::startSection('content'); ?>
-    <h1>Hello from the legacy API</h1>
-<?php View::endSection(); ?>
-```
-
-All helper methods remain available:
-
-- `View::layout($name, $data = [])`
-- `View::startSection($name)` / `View::endSection()`
-- `View::yieldSection($name)`
-- `View::include($name, $data = [])`
-- `View::render($name, $data = [])`
-- `View::renderString($template, $data = [])`
-
-## Caching & Configuration
-
-Compiled templates can be cached to disk. Enable caching in `config/view.php` or at runtime:
-
+### `View::configure(array $config = []): void`
+Override the view config at runtime. Keys: `cache_enabled`, `cache_path`, `cache_lifetime`, `debug`. Defaults come from [`config/view.php`](../config/view.php).
 ```php
 View::configure([
     'cache_enabled' => true,
-    'cache_path' => base('storage/cache'),
     'cache_lifetime' => 3600,
 ]);
 ```
 
-Use `View::clearCache()` to purge the entire cache or `View::clearViewCache('pages/home')` to refresh a single template. When cache is disabled the framework recompiles templates on every render.
+### `View::clearCache(): void`
+Drop every compiled view in the configured cache path.
+```php
+View::clearCache();
+```
 
-## Debugging Tips
+### `View::clearViewCache(string $view): void`
+Drop the cache file for one view.
+```php
+View::clearViewCache('pages.home');
+```
 
-- Drop `@dd($variable)` in a template to dump a value and stop execution.
-- To inspect the compiled PHP, enable caching with `'debug' => true` in the view configuration. Compiled files are written beneath `<cache_path>/views/cache`.
-- If a directive throws a syntax error, re-run with `'cache_enabled' => false` to ensure you are testing fresh output.
+---
 
-## Quick Reference
+## Directives
 
-| Feature                | Directive                             | Underlying API                            |
-| ---------------------- | ------------------------------------- | ----------------------------------------- |
-| Layout binding         | `@layout('layouts.app')`              | `View::layout('layouts.app')`             |
-| Sections               | `@section('name') ... @endsection`    | `View::startSection` / `View::endSection` |
-| Yield                  | `@yield('name')`                      | `View::yieldSection`                      |
-| Partials               | `@include('partials.alert')`          | `View::include`                           |
-| Loops with empty state | `@foreach ... @empty ... @endforeach` | generated PHP guard                       |
-| Raw PHP                | `@php($expr)` / `@php ... @endphp`    | inline PHP blocks                         |
-| Raw HTML               | `{!! $html !!}` or `{{{ $html }}}`    | direct `echo`                             |
-| Safety render text     | `{{ $text }}`                         | `htmlspecialchars`                        |
+Compiled by [`ViewCompiler`](../core/libraries/View/ViewCompiler.php). All directives transparently compile to native PHP.
 
-Keep templates small and focused. For complex presentation logic, move calculations into controllers or view models before handing data to the renderer.
+### Echoing values
+
+```html
+{{ $name }}             {{-- escaped --}}
+{!! $trustedHtml !!}    {{-- raw --}}
+{{{ $alsoEscaped }}}    {{-- legacy: escaped --}}
+@{{ literal }}          {{-- escape the curly braces themselves --}}
+```
+
+### Control flow
+
+```html
+@if ($user)
+    Welcome, {{ $user->name }}
+@elseif ($guest)
+    Hi guest
+@else
+    Sign in
+@endif
+
+@for ($i = 0; $i < 5; $i++)
+    {{ $i }}
+@endfor
+
+@foreach ($items as $item)
+    {{ $item }}
+@empty
+    Nothing here yet.
+@endforeach
+```
+
+`@empty` only fires when the iterable yields zero items.
+
+### Layouts and sections
+
+```html
+{{-- resources/views/layouts/app.php --}}
+<!doctype html>
+<html>
+<head><title>@yield('title')</title></head>
+<body>
+    @yield('body')
+</body>
+</html>
+```
+
+```html
+{{-- resources/views/pages/home.php --}}
+@layout('layouts.app')
+
+@section('title') Dashboard @endsection
+
+@section('body')
+    <h1>Hello, {{ $user->name }}</h1>
+    @include('partials.footer')
+@endsection
+```
+
+### Includes
+
+```html
+@include('partials.header')
+@include('partials.alert', ['type' => 'error', 'message' => $msg])
+```
+
+### i18n directives
+
+See [i18n.md](i18n.md) for the full picture.
+```html
+@t('common.welcome')                      {{-- translates --}}
+@i18n('mail/welcome')                     {{-- switch translation file --}}
+
+@i18n(['title' => 'Hello'])
+    {{ $title }}
+@endi18n
+```
+
+### Inline PHP
+
+```html
+@php
+    $count = count($items);
+@endphp
+
+@php($count = count($items))   {{-- single-expression form --}}
+
+{{ $count }}
+
+@dd($payload)   {{-- dump and exit --}}
+```
+
+---
+
+## Caching
+
+Compiled templates live under `storage/cache/views`. Toggle caching with `View::configure(['cache_enabled' => true])` or `config/view.php`. Each compiled file is keyed by an MD5 of the view identifier and re-validated against the source mtime on every render.
+
+To bust the cache for one view (e.g. after deploying a hot fix without a deploy script):
+```php
+View::clearViewCache('pages.home');
+```
+
+To wipe everything:
+```php
+View::clearCache();
+```
+
+---
+
+## Working with views from controllers
+
+```php
+namespace App\Controllers;
+
+use Zero\Lib\Http\Request;
+
+class UserController
+{
+    public function show(int $id, Request $request)
+    {
+        $user = \App\Models\User::find($id);
+
+        if ($request->wantsJson()) {
+            return $user;             // → JSON
+        }
+
+        return view('users.show', compact('user'));
+    }
+}
+```
+
+Controllers can return:
+
+- a `Response` (`view()` returns one)
+- a string (HTML)
+- a model / array (auto-JSON)
+- `null` (204 No Content)
+
+The router runs everything through `Response::resolve()`.

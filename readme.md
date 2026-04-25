@@ -158,7 +158,10 @@ zero                # CLI entry point for serving and scaffolding
 ### Support Utilities
 
 - [`Zero\Lib\Http\Http`](docs/support.md#http-client) provides a fluent HTTP client for outbound requests (JSON helpers, timeouts, retries, file uploads).
-- [`Zero\Lib\Support\Str`](docs/support.md#string-helpers) bundles familiar string transformations (studly, camel, snake, slug, etc.) for CLI and application code.
+- [`Zero\Lib\Support\Str`](docs/support.md#string-helpers) bundles familiar string transformations (studly, camel, snake, slug, etc.); pair with [`Zero\Lib\Support\Stringable`](docs/support.md#fluent-strings) for fluent chaining via `str()` / `Str::of()`.
+- [`Zero\Lib\Support\Arr`](docs/support.md#array-helpers) covers dot-notation access, transformations, and shape changes.
+- [`Zero\Lib\Support\Collection`](docs/support.md#collections) provides a fluent, chainable wrapper around arrays — built via the global `collect()` helper.
+- [`Zero\Lib\Support\Number`](docs/support.md#number-helpers) formats numbers, sizes, currencies, and percentages.
 - [`Zero\Lib\Storage\Storage`](docs/storage.md) persists files to the configured disks; pair with uploaded files via `$file->store()`.
 
 ## CLI Reference

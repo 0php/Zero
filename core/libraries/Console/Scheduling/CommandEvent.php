@@ -32,9 +32,9 @@ final class CommandEvent extends Event
         return $this;
     }
 
-    protected function execute(Scheduler $scheduler, \DateTimeInterface $now): void
+    protected function execute(Scheduler $scheduler, \DateTimeInterface $now): int
     {
-        $scheduler->runCommand($this->signature, $this->arguments);
+        return $scheduler->runCommand($this->signature, $this->arguments);
     }
 
     protected function defaultDescription(): string

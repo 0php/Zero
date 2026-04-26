@@ -33,6 +33,28 @@ abstract class Event
     protected ?string $identifier = null;
 
     /**
+     * @var array<int, callable(DateTimeInterface): bool>
+     */
+    protected array $filters = [];
+
+    /**
+     * @var array<int, callable(DateTimeInterface): bool>
+     */
+    protected array $rejects = [];
+
+    /** @var array<int, callable> */
+    protected array $beforeCallbacks = [];
+
+    /** @var array<int, callable> */
+    protected array $afterCallbacks = [];
+
+    /** @var array<int, callable> */
+    protected array $successCallbacks = [];
+
+    /** @var array<int, callable> */
+    protected array $failureCallbacks = [];
+
+    /**
      * @var array<string, string>
      */
     private static array $lastExecutionBuckets = [];
@@ -365,6 +387,66 @@ abstract class Event
         return $this;
     }
 
+    /**
+     * Run only when the predicate returns true. May receive the current time.
+     */
+    public function when(callable $callback): static
+    {
+        $this->filters[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Skip when the predicate returns true.
+     */
+    public function skip(callable $callback): static
+    {
+        $this->rejects[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Run before the task executes (only when due and not skipped).
+     */
+    public function before(callable $callback): static
+    {
+        $this->beforeCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Run after the task executes, regardless of outcome.
+     */
+    public function after(callable $callback): static
+    {
+        $this->afterCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Run only when the task completes successfully.
+     */
+    public function onSuccess(callable $callback): static
+    {
+        $this->successCallbacks[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Run only when the task fails (throws or returns a non-zero exit code).
+     */
+    public function onFailure(callable $callback): static
+    {
+        $this->failureCallbacks[] = $callback;
+
+        return $this;
+    }
+
     public function run(Scheduler $scheduler, DateTimeInterface $now): string
     {
         $this->lastException = null;
@@ -401,17 +483,33 @@ abstract class Event
             'task' => $description,
         ]);
 
+        $this->fireCallbacks($this->beforeCallbacks);
+
         $executed = false;
+        $result = self::RESULT_SUCCESS;
 
         try {
             $executed = true;
-            $this->execute($scheduler, $now);
+            $exitCode = $this->execute($scheduler, $now);
 
-            Log::channel('internal')->info('Completed scheduled task.', [
-                'task' => $description,
-            ]);
+            if (is_int($exitCode) && $exitCode !== 0) {
+                $this->lastException = new \RuntimeException(sprintf(
+                    'Scheduled task "%s" exited with code %d.',
+                    $description,
+                    $exitCode
+                ));
 
-            return self::RESULT_SUCCESS;
+                Log::channel('internal')->error('Scheduled task exited non-zero.', [
+                    'task' => $description,
+                    'exit_code' => $exitCode,
+                ]);
+
+                $result = self::RESULT_FAILURE;
+            } else {
+                Log::channel('internal')->info('Completed scheduled task.', [
+                    'task' => $description,
+                ]);
+            }
         } catch (\Throwable $exception) {
             $this->lastException = $exception;
 
@@ -421,7 +519,7 @@ abstract class Event
                 'message' => $exception->getMessage(),
             ]);
 
-            return self::RESULT_FAILURE;
+            $result = self::RESULT_FAILURE;
         } finally {
             if ($executed) {
                 self::$lastExecutionBuckets[$fingerprint] = $bucket;
@@ -432,6 +530,16 @@ abstract class Event
                 $this->mutex()?->release();
             }
         }
+
+        if ($result === self::RESULT_SUCCESS) {
+            $this->fireCallbacks($this->successCallbacks);
+        } else {
+            $this->fireCallbacks($this->failureCallbacks);
+        }
+
+        $this->fireCallbacks($this->afterCallbacks);
+
+        return $result;
     }
 
     public function lastException(): ?\Throwable
@@ -444,6 +552,14 @@ abstract class Event
         return $this->description ?? $this->defaultDescription();
     }
 
+    /**
+     * Public accessor for tooling (e.g. schedule:list dry-run preview).
+     */
+    public function isDueAt(DateTimeInterface $now): bool
+    {
+        return $this->isDue($now);
+    }
+
     protected function isDue(DateTimeInterface $now): bool
     {
         foreach ($this->constraints as $constraint) {
@@ -452,10 +568,43 @@ abstract class Event
             }
         }
 
+        foreach ($this->filters as $filter) {
+            if (! $filter($now)) {
+                return false;
+            }
+        }
+
+        foreach ($this->rejects as $reject) {
+            if ($reject($now)) {
+                return false;
+            }
+        }
+
         return true;
     }
 
-    abstract protected function execute(Scheduler $scheduler, DateTimeInterface $now): void;
+    /**
+     * @param array<int, callable> $callbacks
+     */
+    private function fireCallbacks(array $callbacks): void
+    {
+        foreach ($callbacks as $callback) {
+            try {
+                $callback($this);
+            } catch (\Throwable $exception) {
+                Log::channel('internal')->warning('Scheduled task hook threw an exception.', [
+                    'task' => $this->getDescription(),
+                    'exception' => $exception::class,
+                    'message' => $exception->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Execute the task. Subclasses may return an int exit code; non-zero is treated as failure.
+     */
+    abstract protected function execute(Scheduler $scheduler, DateTimeInterface $now);
 
     abstract protected function defaultDescription(): string;
 

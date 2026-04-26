@@ -25,6 +25,7 @@ use Zero\Lib\Console\Commands\SeedCommand;
 use Zero\Lib\Console\Commands\RouteListCommand;
 use Zero\Lib\Console\Commands\ServeCommand;
 use Zero\Lib\Console\Commands\StorageLinkCommand;
+use Zero\Lib\Console\Commands\ScheduleListCommand;
 use Zero\Lib\Console\Commands\ScheduleRunCommand;
 use Zero\Lib\Console\Commands\LogClearCommand;
 use Zero\Lib\Console\Commands\DatabaseDumpCommand;
@@ -62,6 +63,7 @@ final class Application
         $this->addCommand(new KeyGenerateCommand());
         $this->addCommand(new StorageLinkCommand());
         $this->addCommand(new ScheduleRunCommand());
+        $this->addCommand(new ScheduleListCommand());
         $this->addCommand(new LogClearCommand());
         $this->addCommand(new DatabaseDumpCommand());
         $this->addCommand(new DatabaseRestoreCommand());

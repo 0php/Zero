@@ -206,6 +206,7 @@ For a production-ready setup (Nginx + PHP-FPM, environment variables, logging, m
 - [Framework Overview](docs/overview.md)
 - [Request & Response Lifecycle](docs/request-response.md)
 - [Routing](docs/router.md)
+- [Controllers](docs/controllers.md)
 - [DBML Query Builder](docs/dbml.md)
 - [Model Layer](docs/models.md)
 - [View Layer](docs/view.md)

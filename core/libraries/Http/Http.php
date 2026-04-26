@@ -1,192 +1,252 @@
 <?php
+
+declare(strict_types=1);
+
 namespace Zero\Lib;
 
-use Zero\Lib\Session;
+use Zero\Lib\Http\PendingRequest;
+use Zero\Lib\Http\SoapRequest;
 
+/**
+ * Http facade.
+ *
+ * Two ways to use it:
+ *
+ * 1. Legacy static (back-compatible) — returns a plain stdClass:
+ *      $r = Http::get($url, $query, $headers, $timeout);
+ *      $r->ok; $r->status; $r->body; $r->json; $r->error;
+ *
+ * 2. Fluent (preferred) — returns a Zero\Lib\Http\ClientResponse:
+ *      $r = Http::timeout(10)->acceptJson()->withToken($t)->get($url);
+ *      $r->successful(); $r->status(); $r->body(); $r->json(); $r->headers();
+ */
 class Http
 {
+    /** @var array<string, string> */
     private static array $defaultHeaders = [];
+
+    // ----- Legacy global default-header accessors (kept for BC) -----
 
     public static function setDefaultHeaders(array $headers): void
     {
-        self::$defaultHeaders = self::normalizeHeaders($headers);
+        self::$defaultHeaders = [];
+        foreach ($headers as $key => $value) {
+            if (is_int($key)) {
+                if (is_string($value) && str_contains($value, ':')) {
+                    [$n, $v] = explode(':', $value, 2);
+                    self::$defaultHeaders[trim($n)] = trim($v);
+                }
+            } else {
+                self::$defaultHeaders[(string) $key] = (string) $value;
+            }
+        }
     }
 
     public static function addDefaultHeader(string $name, string $value): void
     {
-        self::$defaultHeaders[] = $name . ': ' . $value;
+        self::$defaultHeaders[$name] = $value;
     }
+
+    // ----- Fluent entry points -----
+
+    public static function timeout(int $seconds): PendingRequest
+    {
+        return self::pending()->timeout($seconds);
+    }
+
+    public static function connectTimeout(int $seconds): PendingRequest
+    {
+        return self::pending()->connectTimeout($seconds);
+    }
+
+    public static function withHeaders(array $headers): PendingRequest
+    {
+        return self::pending()->withHeaders($headers);
+    }
+
+    public static function withHeader(string $name, string $value): PendingRequest
+    {
+        return self::pending()->withHeader($name, $value);
+    }
+
+    public static function acceptJson(): PendingRequest
+    {
+        return self::pending()->acceptJson();
+    }
+
+    public static function accept(string $contentType): PendingRequest
+    {
+        return self::pending()->accept($contentType);
+    }
+
+    public static function asJson(): PendingRequest
+    {
+        return self::pending()->asJson();
+    }
+
+    public static function asForm(): PendingRequest
+    {
+        return self::pending()->asForm();
+    }
+
+    public static function asMultipart(): PendingRequest
+    {
+        return self::pending()->asMultipart();
+    }
+
+    public static function bodyFormat(string $format): PendingRequest
+    {
+        return self::pending()->bodyFormat($format);
+    }
+
+    public static function contentType(string $type): PendingRequest
+    {
+        return self::pending()->contentType($type);
+    }
+
+    public static function withToken(string $token, string $type = 'Bearer'): PendingRequest
+    {
+        return self::pending()->withToken($token, $type);
+    }
+
+    public static function withBasicAuth(string $username, string $password): PendingRequest
+    {
+        return self::pending()->withBasicAuth($username, $password);
+    }
+
+    public static function withQueryParameters(array $query): PendingRequest
+    {
+        return self::pending()->withQueryParameters($query);
+    }
+
+    public static function withCookies(array $cookies): PendingRequest
+    {
+        return self::pending()->withCookies($cookies);
+    }
+
+    public static function withUserAgent(string $userAgent): PendingRequest
+    {
+        return self::pending()->withUserAgent($userAgent);
+    }
+
+    public static function withoutVerifying(): PendingRequest
+    {
+        return self::pending()->withoutVerifying();
+    }
+
+    public static function baseUrl(string $url): PendingRequest
+    {
+        return self::pending()->baseUrl($url);
+    }
+
+    public static function withOptions(array $options): PendingRequest
+    {
+        return self::pending()->withOptions($options);
+    }
+
+    public static function attach(string $name, mixed $contents, ?string $filename = null, array $headers = []): PendingRequest
+    {
+        return self::pending()->attach($name, $contents, $filename, $headers);
+    }
+
+    public static function retry(int $times, int $sleepMs = 0, ?callable $when = null): PendingRequest
+    {
+        return self::pending()->retry($times, $sleepMs, $when);
+    }
+
+    public static function dump(): PendingRequest
+    {
+        return self::pending()->dump();
+    }
+
+    public static function dd(): PendingRequest
+    {
+        return self::pending()->dd();
+    }
+
+    /**
+     * Build a fluent SOAP request.
+     *
+     * Examples:
+     *   Http::soap('https://api.example.com/service?wsdl')->call('GetRates', [...]);
+     *   Http::soap()->endpoint($url)->uri('urn:Foo')->action('urn:Foo#Bar')->call('Bar', [...]);
+     */
+    public static function soap(?string $wsdl = null): SoapRequest
+    {
+        return new SoapRequest($wsdl);
+    }
+
+    // ----- Legacy verb statics (back-compatible signatures + return type) -----
 
     public static function get(string $url, array $query = [], array $headers = [], ?int $timeout = null): object
     {
-        return self::request('GET', $url, null, $headers, $timeout, $query);
+        return self::legacyVerb('GET', $url, null, $headers, $timeout, $query);
     }
 
     public static function post(string $url, mixed $data = null, array $headers = [], ?int $timeout = null, array $query = []): object
     {
-        return self::request('POST', $url, $data, $headers, $timeout, $query);
+        return self::legacyVerb('POST', $url, $data, $headers, $timeout, $query);
     }
 
     public static function put(string $url, mixed $data = null, array $headers = [], ?int $timeout = null, array $query = []): object
     {
-        return self::request('PUT', $url, $data, $headers, $timeout, $query);
+        return self::legacyVerb('PUT', $url, $data, $headers, $timeout, $query);
     }
 
     public static function patch(string $url, mixed $data = null, array $headers = [], ?int $timeout = null, array $query = []): object
     {
-        return self::request('PATCH', $url, $data, $headers, $timeout, $query);
+        return self::legacyVerb('PATCH', $url, $data, $headers, $timeout, $query);
     }
 
     public static function delete(string $url, mixed $data = null, array $headers = [], ?int $timeout = null, array $query = []): object
     {
-        return self::request('DELETE', $url, $data, $headers, $timeout, $query);
+        return self::legacyVerb('DELETE', $url, $data, $headers, $timeout, $query);
     }
 
-    private static function request(string $method, string $url, mixed $data = null, array $additionalHeaders = [], ?int $timeout = null, array $query = []): object
+    private static function legacyVerb(string $method, string $url, mixed $data, array $headers, ?int $timeout, array $query): object
     {
-        $resolvedUrl = self::resolveUrl($url, $query);
-        $headers = self::mergeHeaders($additionalHeaders, $data !== null);
-
-        $options = [
-            CURLOPT_URL => $resolvedUrl,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-            CURLOPT_CUSTOMREQUEST => strtoupper($method),
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-        ];
-
+        $request = self::pending();
+        if ($headers !== []) {
+            $request->withHeaders(self::flattenLegacyHeaders($headers));
+        }
         if ($timeout !== null) {
-            $timeout = max(1, (int) $timeout);
-            $options[CURLOPT_TIMEOUT] = $timeout;
-            $options[CURLOPT_CONNECTTIMEOUT] = $timeout;
+            $request->timeout($timeout);
         }
-
-        if ($data !== null) {
-            $options[CURLOPT_POSTFIELDS] = self::preparePayload($data);
-            // Ensure headers reflect potential new content-type
-            $options[CURLOPT_HTTPHEADER] = self::mergeHeaders($additionalHeaders, true);
-        }
-
-        $handle = curl_init();
-        curl_setopt_array($handle, $options);
-
-        $responseBody = curl_exec($handle);
-        $statusCode = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
-        $error = curl_errno($handle) ? curl_error($handle) : null;
-
-        curl_close($handle);
-
-        if ($responseBody === false) {
-            $responseBody = null;
-        }
-
-        $decoded = null;
-        if (is_string($responseBody) && $responseBody !== '') {
-            $decoded = json_decode($responseBody, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                $decoded = null;
-            }
-        }
-
-        if ($statusCode === 0 && $error !== null) {
-            $statusCode = 500;
-        }
-
-        return (object) [
-            'ok' => $error === null && $statusCode >= 200 && $statusCode < 300,
-            'status' => $statusCode,
-            'body' => $responseBody,
-            'json' => $decoded,
-            'error' => $error,
-        ];
+        $response = $request->send($method, $url, $data, $query);
+        return $response->toLegacyObject();
     }
 
-    private static function resolveUrl(string $url, array $query): string
+    /**
+     * Build a fresh PendingRequest seeded with global default headers.
+     */
+    private static function pending(): PendingRequest
     {
-        $absolute = (bool) preg_match('/^https?:\/\//i', $url);
-
-        if (! $absolute) {
-            $base = $_ENV['CONFIG']['API_HOST'] ?? '';
-            $url = rtrim((string) $base, '/') . '/' . ltrim($url, '/');
+        $request = new PendingRequest();
+        if (self::$defaultHeaders !== []) {
+            $request->withHeaders(self::$defaultHeaders);
         }
-
-        if (! empty($query)) {
-            $separator = str_contains($url, '?') ? '&' : '?';
-            $url .= $separator . http_build_query($query);
-        }
-
-        return $url;
+        return $request;
     }
 
-    private static function mergeHeaders(array $additionalHeaders, bool $expectsJsonBody): array
+    /**
+     * Convert legacy header arrays (mixed numeric "Name: Value" lines and assoc) into associative.
+     *
+     * @param array<int|string, string> $headers
+     * @return array<string, string>
+     */
+    private static function flattenLegacyHeaders(array $headers): array
     {
-        $headers = self::getBaseHeaders();
-        $normalized = self::normalizeHeaders($additionalHeaders);
-
-        foreach ($normalized as $header) {
-            $headers[] = $header;
-        }
-
-        if ($expectsJsonBody && ! self::hasHeader($headers, 'Content-Type')) {
-            $headers[] = 'Content-Type: application/json';
-        }
-
-        return $headers;
-    }
-
-    private static function preparePayload(mixed $data): string
-    {
-        if (is_string($data)) {
-            return $data;
-        }
-
-        if (is_array($data) || is_object($data)) {
-            $encoded = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
-            return $encoded === false ? '' : $encoded;
-        }
-
-        return (string) $data;
-    }
-
-    private static function getBaseHeaders(): array
-    {
-        $headers = self::$defaultHeaders;
-
-        if (Session::has('token') && ! self::hasHeader($headers, 'Authorization')) {
-            $headers[] = 'Authorization: Bearer ' . Session::get('token');
-        }
-
-        return $headers;
-    }
-
-    private static function normalizeHeaders(array $headers): array
-    {
-        $normalized = [];
-
+        $result = [];
         foreach ($headers as $key => $value) {
             if (is_int($key)) {
-                $normalized[] = $value;
-                continue;
-            }
-
-            $normalized[] = $key . ': ' . $value;
-        }
-
-        return $normalized;
-    }
-
-    private static function hasHeader(array $headers, string $name): bool
-    {
-        foreach ($headers as $header) {
-            if (stripos($header, $name . ':') === 0) {
-                return true;
+                if (is_string($value) && str_contains($value, ':')) {
+                    [$n, $v] = explode(':', $value, 2);
+                    $result[trim($n)] = trim($v);
+                }
+            } else {
+                $result[(string) $key] = (string) $value;
             }
         }
-
-        return false;
+        return $result;
     }
 }

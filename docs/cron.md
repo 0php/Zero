@@ -87,6 +87,200 @@ $schedule->command('app:test', ['--type=every-three-minutes'])
 
 Chain additional helpers (`everySixHours()`, `daysOfWeek()`, etc.) to exercise the combinations you rely on. Remove the block once you finish testing.
 
+## Schedule API
+
+```php
+use Zero\Lib\Console\Scheduling\Schedule;
+```
+
+Each task is registered with `$schedule->command(...)` or `$schedule->call(...)`, then chained with cadence + filter helpers.
+
+### Defining tasks
+
+#### `$schedule->command(string $signature, array $args = []): Event`
+Schedule a CLI command.
+```php
+$schedule->command('emails:dispatch')->everyFiveMinutes();
+$schedule->command('app:test', ['--type=manual'])->everyMinute();
+```
+
+#### `$schedule->call(callable $callback, ?string $description = null): Event`
+Schedule any closure / invokable.
+```php
+$schedule->call(fn () => cache_clear())->dailyAt('02:00');
+```
+
+### Cadence helpers
+
+Every helper returns the `Event`, so you can keep chaining.
+
+#### Minute-level
+```php
+$schedule->command('a')->everyMinute();
+$schedule->command('a')->everyTwoMinutes();
+$schedule->command('a')->everyThreeMinutes();
+$schedule->command('a')->everyFiveMinutes();
+$schedule->command('a')->everyTenMinutes();
+$schedule->command('a')->everyFifteenMinutes();
+$schedule->command('a')->everyThirtyMinutes();
+$schedule->command('a')->everyMinutes(7);   // every 7 minutes
+```
+
+#### Hour-level
+```php
+$schedule->command('a')->hourly();
+$schedule->command('a')->hourlyAt(15);          // every hour at :15
+$schedule->command('a')->everyHours(2);         // every 2 hours, on the hour
+$schedule->command('a')->everyHours(2, 30);     // every 2 hours at :30
+$schedule->command('a')->everySixHours(10);
+$schedule->command('a')->everyTwelveHours();
+$schedule->command('a')->twiceDaily(1, 13);     // 01:00 and 13:00
+```
+
+#### Day-level
+```php
+$schedule->command('a')->daily();
+$schedule->command('a')->dailyAt('00:30');
+$schedule->command('a')->weekdays('09:00');
+$schedule->command('a')->weekends('10:00');
+```
+
+#### Week-level
+```php
+$schedule->command('a')->weekly();                    // Mondays 00:00
+$schedule->command('a')->weeklyOn(0, '09:00');        // Sundays 09:00
+$schedule->command('a')->sunday();                    // Sun 00:00
+$schedule->command('a')->monday();
+$schedule->command('a')->tuesday();
+$schedule->command('a')->wednesday();
+$schedule->command('a')->thursday();
+$schedule->command('a')->friday();
+$schedule->command('a')->saturday();
+```
+
+#### Month / year
+```php
+$schedule->command('a')->monthly();                    // 1st 00:00
+$schedule->command('a')->monthlyOn(15, '02:00');       // 15th at 02:00
+$schedule->command('a')->quarterly('03:00');           // Jan/Apr/Jul/Oct 1st 03:00
+$schedule->command('a')->yearly('00:00');              // Jan 1 00:00
+```
+
+### Filter helpers
+
+Stack these on top of a cadence to narrow execution.
+
+#### `daysOfWeek(int ...$days)` — Sun=0..Sat=6
+```php
+$schedule->command('reports:sync')->hourlyAt(5)->daysOfWeek(1, 2, 3, 4, 5);
+```
+
+#### `datesOfMonth(int ...$dates)` — 1..31
+```php
+$schedule->command('finance:statements')->dailyAt('02:00')->datesOfMonth(1, 15);
+```
+
+#### `months(int ...$months)` — 1..12
+```php
+$schedule->command('audit')->monthly()->months(1, 4, 7, 10);
+```
+
+#### `hours(int ...$hours)` / `minutes(int ...$minutes)`
+```php
+$schedule->command('a')->everySixHours()->hours(0, 6, 12, 18);
+$schedule->command('a')->hourly()->minutes(15, 45);
+```
+
+### Concurrency & metadata
+
+#### `withoutOverlapping(?int $expiresAfter = null): Event`
+Skip the run if the previous one is still going. Optional file-lock TTL in seconds.
+```php
+$schedule->command('reports:sync')->hourly()->withoutOverlapping();
+$schedule->command('reports:sync')->hourly()->withoutOverlapping(900);
+```
+
+#### `mutexName(string $name): Event`
+Share a lock key across multiple events.
+```php
+$schedule->command('a')->hourly()->withoutOverlapping()->mutexName('reports');
+$schedule->command('b')->hourly()->withoutOverlapping()->mutexName('reports');
+```
+
+#### `description(string $text): Event`
+```php
+$schedule->command('a')->daily()->description('Nightly clean-up');
+```
+
+### Conditional helpers
+
+Stack arbitrary predicates on top of cadence/filter rules. Predicates receive the current `DateTimeInterface`.
+
+#### `when(callable $predicate): Event`
+Run only when the predicate returns truthy.
+```php
+$schedule->command('reports:sync')
+    ->hourly()
+    ->when(fn () => env('APP_ENV') === 'production');
+```
+
+#### `skip(callable $predicate): Event`
+Skip the run when the predicate returns truthy.
+```php
+$schedule->command('emails:dispatch')
+    ->everyFiveMinutes()
+    ->skip(fn () => env('DISABLE_EMAILS') === 'true');
+```
+
+### Lifecycle hooks
+
+Attach side effects without changing the task itself. Hooks run after the cadence/`when`/`skip` checks pass. Each hook receives the `Event` instance. Hook exceptions are logged but never break the scheduler.
+
+#### `before(callable $callback): Event`
+Runs immediately before `execute()`.
+```php
+$schedule->command('reports:sync')
+    ->hourly()
+    ->before(fn ($event) => logger('starting ' . $event->getDescription()));
+```
+
+#### `after(callable $callback): Event`
+Always runs after `execute()`, success or failure.
+```php
+$schedule->command('reports:sync')
+    ->hourly()
+    ->after(fn ($event) => logger('finished ' . $event->getDescription()));
+```
+
+#### `onSuccess(callable $callback): Event`
+Runs only when the task completes successfully (no throw, exit code 0 or void).
+```php
+$schedule->command('billing:invoice')
+    ->dailyAt('00:30')
+    ->onSuccess(fn () => Http::get('https://hc-ping.com/abc-123'));
+```
+
+#### `onFailure(callable $callback): Event`
+Runs only when the task throws or returns a non-zero exit code.
+```php
+$schedule->command('billing:invoice')
+    ->dailyAt('00:30')
+    ->onFailure(fn ($event) => logger('billing failed: ' . $event->lastException()?->getMessage()));
+```
+
+> **Exit codes.** `command()` events now propagate the exit code returned by the underlying console command. A non-zero exit triggers `onFailure` and is reported as a failure in `schedule:run`. Closures attached via `call()` continue to be treated as successful unless they throw.
+
+### Raw cron expressions
+
+#### `cron(string $expression): Event`
+Five fields: `minute hour day-of-month month day-of-week`. Supports lists (`1,15`), ranges (`1-5`), steps (`*/10`), month/weekday aliases (`jan`, `mon`, …), and `?`.
+```php
+$schedule->command('a')->cron('0 9 ? * mon-fri');   // 09:00 weekdays
+$schedule->command('a')->cron('*/10 * * * *');      // every 10 minutes
+```
+
+---
+
 ## Building Your Schedule
 
 - Keep tasks idempotent so a run that fires twice in the same window does not produce duplicate side effects.
@@ -150,17 +344,44 @@ Press Ctrl+C when you are done. Adjust the `sleep` duration or inline additional
 
 Container platforms (Kubernetes CronJob, ECS Scheduled Task, etc.) should invoke the same command on their own scheduler.
 
+## Listing the schedule
+
+Inspect which tasks are registered (and which are due right now) without executing them:
+
+```bash
+php zero schedule:list
+php zero schedule:list --path=routes/cron.php
+```
+
+The `Due now` column reflects every active rule — cadence helpers, `daysOfWeek`/`hours`/`minutes` filters, and any `when()`/`skip()` predicates. Useful for verifying that a new schedule will fire when you expect.
+
+## Draining the queue from cron
+
+Hosts without supervisord can drain the queue by scheduling `queue:work --once`:
+
+```php
+$schedule->command('queue:work', ['--once', '--queue=default'])
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->description('Drain default queue');
+```
+
+See [queue.md](queue.md) for the full queue reference.
+
 ## Operating & Monitoring
 
 - Manual runs: `php zero schedule:run` is safe when testing new tasks—the output is routed through the internal log channel.
+- Listing: `php zero schedule:list` prints every registered task and whether it would fire at the current minute.
 - Logging: each run emits “running/completed/failed” log events; redirect cron stdout/stderr to an aggregated log file or service.
-- Health checks: append a heartbeat (DB row, log ping, uptime monitor) at the end of `schedule:run` to detect missed invocations.
-- Failure handling: the command exits with a non-zero status if any task throws; configure alerts on cron failures or log errors.
+- Health checks: append a heartbeat (DB row, log ping, uptime monitor) at the end of `schedule:run` to detect missed invocations. Or use `onSuccess(fn () => Http::get($pingUrl))` per-task for fine-grained healthcheck.io / cronitor pings.
+- Failure handling: the command exits with a non-zero status if any task throws or a scheduled `command()` returns a non-zero exit code. Use `onFailure()` to wire alerts.
 
 ## Roadmap Ideas
 
 - Introduce per-task timezone overrides (e.g. `$event->timezone('UTC')`).
-- Surface lifecycle hooks (`before`/`after` callbacks, success/failure listeners).
+- Background execution (`runInBackground()`) so a slow task does not block subsequent ones.
+- Per-task output capture (`sendOutputTo($file)` / `appendOutputTo($file)`).
+- Built-in healthcheck-ping helpers (`pingBefore($url)` / `thenPing($url)`).
 - Support alternative mutex stores beyond the file-based lock.
 - Document best practices for multi-environment schedules and feature toggles.
 

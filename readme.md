@@ -36,6 +36,7 @@ Zero Framework is a native-PHP micro-framework that mirrors the developer ergono
 - Fluent DBML (Database Management Layer) query builder, active-record models, migrations, and seeders driven by a concise DBAL.
 - Battery-included CLI (`zero`) for serving, scaffolding, and database management.
 - SMTP mailer with fluent message composition and secure TLS defaults.
+- Background queue (`sync` and `database` drivers) with retry, failed-jobs table, and a long-running worker.
 - Centralised error handler with configurable HTML/JSON output and configurable log channels (file or database).
 - Simple `.env` loader with support for multiple environments and interpolation.
 
@@ -158,7 +159,10 @@ zero                # CLI entry point for serving and scaffolding
 ### Support Utilities
 
 - [`Zero\Lib\Http\Http`](docs/support.md#http-client) provides a fluent HTTP client for outbound requests (JSON helpers, timeouts, retries, file uploads).
-- [`Zero\Lib\Support\Str`](docs/support.md#string-helpers) bundles familiar string transformations (studly, camel, snake, slug, etc.) for CLI and application code.
+- [`Zero\Lib\Support\Str`](docs/support.md#string-helpers) bundles familiar string transformations (studly, camel, snake, slug, etc.); pair with [`Zero\Lib\Support\Stringable`](docs/support.md#fluent-strings) for fluent chaining via `str()` / `Str::of()`.
+- [`Zero\Lib\Support\Arr`](docs/support.md#array-helpers) covers dot-notation access, transformations, and shape changes.
+- [`Zero\Lib\Support\Collection`](docs/support.md#collections) provides a fluent, chainable wrapper around arrays — built via the global `collect()` helper.
+- [`Zero\Lib\Support\Number`](docs/support.md#number-helpers) formats numbers, sizes, currencies, and percentages.
 - [`Zero\Lib\Storage\Storage`](docs/storage.md) persists files to the configured disks; pair with uploaded files via `$file->store()`.
 
 ## CLI Reference
@@ -207,6 +211,7 @@ For a production-ready setup (Nginx + PHP-FPM, environment variables, logging, m
 - [View Layer](docs/view.md)
 - [Authentication](docs/auth.md)
 - [Mailer](docs/mail.md)
+- [Queue](docs/queue.md)
 - [CLI Tooling](docs/cli.md)
 - [Storage](docs/storage.md)
 

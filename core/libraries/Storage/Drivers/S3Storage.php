@@ -187,6 +187,292 @@ final class S3Storage
         return $this->client->createPresignedUrl('GET', $this->applyRoot($path), $seconds);
     }
 
+    /**
+     * Delete one or more objects.
+     *
+     * @param string|array<int, string> $paths
+     */
+    public function delete(string|array $paths): bool
+    {
+        $paths = is_array($paths) ? $paths : [$paths];
+        $ok = true;
+
+        foreach ($paths as $path) {
+            $status = $this->client->deleteObject($this->applyRoot($path));
+
+            if ($status >= 300) {
+                $ok = false;
+            }
+        }
+
+        return $ok;
+    }
+
+    /**
+     * Delete every object under a "directory" prefix.
+     */
+    public function deleteDirectory(string $directory): bool
+    {
+        $prefix = trim($directory, '/');
+        if ($prefix === '') {
+            return false; // refuse to wipe the entire bucket — use with intent
+        }
+
+        $prefixedKey = ltrim($this->applyRoot($prefix . '/'), '/');
+        $ok = true;
+
+        foreach ($this->client->listAllObjects($prefixedKey) as $object) {
+            $status = $this->client->deleteObject($object['Key']);
+            if ($status >= 300) {
+                $ok = false;
+            }
+        }
+
+        return $ok;
+    }
+
+    public function copy(string $from, string $to): bool
+    {
+        $status = $this->client->copyObject($this->applyRoot($from), $this->applyRoot($to));
+
+        return $status >= 200 && $status < 300;
+    }
+
+    public function move(string $from, string $to): bool
+    {
+        if (! $this->copy($from, $to)) {
+            return false;
+        }
+
+        return $this->delete($from);
+    }
+
+    /**
+     * Read-modify-write the object with $data prepended. Cheap object,
+     * expensive on big ones — at-least-once semantics with no atomicity.
+     */
+    public function prepend(string $path, string $data): string
+    {
+        $existing = $this->exists($path) ? $this->get($path) : '';
+
+        return $this->put($path, $data . $existing);
+    }
+
+    public function append(string $path, string $data): string
+    {
+        $existing = $this->exists($path) ? $this->get($path) : '';
+
+        return $this->put($path, $existing . $data);
+    }
+
+    /**
+     * List "directory" prefixes inside $directory. S3 has no real directories,
+     * so this returns common prefixes derived from object keys.
+     *
+     * @return array<int, string>
+     */
+    public function directories(string $directory = '', bool $recursive = false): array
+    {
+        $prefix = trim($directory, '/');
+        $rootPrefix = ltrim($this->applyRoot($prefix === '' ? '' : $prefix . '/'), '/');
+
+        $results = [];
+
+        foreach ($this->client->listAllObjects($rootPrefix) as $object) {
+            $key = $object['Key'];
+
+            if (str_ends_with($key, '.meta.json')) {
+                continue;
+            }
+
+            $remainder = $rootPrefix === '' ? $key : substr($key, strlen($rootPrefix));
+
+            if ($remainder === false || $remainder === '') {
+                continue;
+            }
+
+            // Walk every "/" separator in the remainder so we can collect
+            // both shallow and (when $recursive) nested prefixes.
+            $segments = explode('/', $remainder);
+            array_pop($segments); // drop the file basename
+
+            if ($segments === []) {
+                continue;
+            }
+
+            $accumulated = $prefix === '' ? '' : $prefix;
+
+            foreach ($segments as $i => $segment) {
+                if ($segment === '') {
+                    continue;
+                }
+
+                $accumulated = $accumulated === '' ? $segment : $accumulated . '/' . $segment;
+
+                if (! $recursive && $i > 0) {
+                    break;
+                }
+
+                $results[$accumulated] = true;
+            }
+        }
+
+        ksort($results);
+
+        return array_keys($results);
+    }
+
+    /**
+     * S3 has no native directory primitive — emulated by writing a 0-byte
+     * key ending in "/", which keeps the prefix visible to console UIs.
+     */
+    public function makeDirectory(string $path): bool
+    {
+        $key = rtrim($this->applyRoot($path), '/') . '/';
+
+        return $this->client->putObject($key, '') >= 200 && true;
+    }
+
+    public function size(string $path): int
+    {
+        [$status, , $headers] = $this->client->headObject($this->applyRoot($path));
+
+        if ($status < 200 || $status >= 300) {
+            throw new RuntimeException(sprintf('Object [%s] does not exist.', $path));
+        }
+
+        return (int) $this->headerValue($headers, 'Content-Length');
+    }
+
+    public function lastModified(string $path): int
+    {
+        [$status, , $headers] = $this->client->headObject($this->applyRoot($path));
+
+        if ($status < 200 || $status >= 300) {
+            throw new RuntimeException(sprintf('Object [%s] does not exist.', $path));
+        }
+
+        $value = $this->headerValue($headers, 'Last-Modified');
+
+        if ($value === '') {
+            return 0;
+        }
+
+        $timestamp = strtotime($value);
+
+        return $timestamp === false ? 0 : $timestamp;
+    }
+
+    public function mimeType(string $path): string
+    {
+        [$status, , $headers] = $this->client->headObject($this->applyRoot($path));
+
+        if ($status < 200 || $status >= 300) {
+            throw new RuntimeException(sprintf('Object [%s] does not exist.', $path));
+        }
+
+        $value = $this->headerValue($headers, 'Content-Type');
+
+        return $value !== '' ? $value : 'application/octet-stream';
+    }
+
+    /**
+     * Stream an object's body. Caller must fclose() the returned resource.
+     *
+     * @return resource
+     */
+    public function readStream(string $path)
+    {
+        $stream = $this->client->streamObject($this->applyRoot($path));
+
+        if ($stream === false) {
+            throw new RuntimeException(sprintf('Unable to read object [%s].', $path));
+        }
+
+        return $stream;
+    }
+
+    /**
+     * Upload from an open stream. Buffers into memory because the underlying
+     * adapter expects a complete body — fine for small/medium files; use
+     * putFile() with a pre-saved File for large uploads to avoid memory
+     * pressure.
+     *
+     * @param resource $stream
+     */
+    public function writeStream(string $path, $stream): string
+    {
+        if (! is_resource($stream)) {
+            throw new \InvalidArgumentException('writeStream() expects a stream resource.');
+        }
+
+        $contents = stream_get_contents($stream);
+
+        if ($contents === false) {
+            throw new RuntimeException(sprintf('Unable to read source stream for [%s].', $path));
+        }
+
+        return $this->put($path, $contents);
+    }
+
+    /**
+     * Apply a public-read or private ACL to the object.
+     */
+    public function setVisibility(string $path, string $visibility): bool
+    {
+        $acl = match ($visibility) {
+            'public' => 'public-read',
+            'private' => 'private',
+            default => throw new \InvalidArgumentException(sprintf('Unsupported visibility [%s]. Use public or private.', $visibility)),
+        };
+
+        $key = $this->applyRoot($path);
+
+        if (! $this->exists($path)) {
+            return false;
+        }
+
+        // Re-issue a copy onto the same key with the new ACL header.
+        $status = $this->client->copyObject($key, $key, [
+            'x-amz-acl' => $acl,
+            'x-amz-metadata-directive' => 'COPY',
+        ]);
+
+        return $status >= 200 && $status < 300;
+    }
+
+    /**
+     * Best-effort visibility readout: unknown returns 'private' (the safe
+     * default). Many S3-compatible providers do not surface ACL via HEAD;
+     * relying on returned values for security checks is not recommended.
+     */
+    public function getVisibility(string $path): string
+    {
+        return $this->exists($path) ? 'private' : throw new RuntimeException(sprintf('Object [%s] does not exist.', $path));
+    }
+
+    /**
+     * @param array<int, string> $headers
+     */
+    private function headerValue(array $headers, string $name): string
+    {
+        $needle = strtolower($name);
+
+        foreach ($headers as $line) {
+            if (! is_string($line) || ! str_contains($line, ':')) {
+                continue;
+            }
+
+            [$header, $value] = explode(':', $line, 2);
+
+            if (strtolower(trim($header)) === $needle) {
+                return trim($value);
+            }
+        }
+
+        return '';
+    }
+
     /** Stream an object directly to the HTTP response. */
     public function response(string $path, array $options = []): Response
     {

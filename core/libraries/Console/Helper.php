@@ -24,11 +24,210 @@ if (!function_exists('dd')) {
 
         if (PHP_SAPI === 'cli') {
             _ddRenderCli($values, $context);
+        } elseif (_ddExpectsJson()) {
+            _ddRenderJson($values, $context);
         } else {
             _ddRenderHttp($values, $context);
         }
 
         exit(255);
+    }
+}
+
+if (!function_exists('_ddExpectsJson')) {
+    /**
+     * Decide whether the current HTTP request prefers a JSON response.
+     */
+    function _ddExpectsJson(): bool
+    {
+        if (function_exists('zero_request_expects_json')) {
+            try {
+                if (zero_request_expects_json()) {
+                    return true;
+                }
+            } catch (\Throwable) {
+                // Fall through to header sniffing.
+            }
+        }
+
+        $accept = $_SERVER['HTTP_ACCEPT'] ?? '';
+        if (is_string($accept) && $accept !== '') {
+            if (stripos($accept, 'application/json') !== false) {
+                return true;
+            }
+            if (stripos($accept, '+json') !== false) {
+                return true;
+            }
+        }
+
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? ($_SERVER['HTTP_CONTENT_TYPE'] ?? '');
+        if (is_string($contentType) && stripos($contentType, 'application/json') !== false) {
+            return true;
+        }
+
+        $requestedWith = $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '';
+        if (is_string($requestedWith) && strcasecmp($requestedWith, 'XMLHttpRequest') === 0) {
+            return true;
+        }
+
+        return false;
+    }
+}
+
+if (!function_exists('_ddRenderJson')) {
+    /**
+     * Render dumped values as a JSON response for API/AJAX clients.
+     *
+     * @param array<int, mixed> $values
+     * @param array<string, mixed> $context
+     */
+    function _ddRenderJson(array $values, array $context): void
+    {
+        if (function_exists('ob_get_level')) {
+            while (ob_get_level() > 0) {
+                @ob_end_clean();
+            }
+        }
+
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+        }
+
+        $trace = [];
+        foreach (array_slice(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS), 2, 8) as $i => $frame) {
+            $trace[] = [
+                'index' => $i,
+                'file' => isset($frame['file']) ? _ddShortenPath((string) $frame['file']) : '[internal]',
+                'line' => isset($frame['line']) ? (int) $frame['line'] : null,
+                'function' => ($frame['class'] ?? '') . ($frame['type'] ?? '') . ($frame['function'] ?? '[closure]'),
+            ];
+        }
+
+        $serialized = [];
+        foreach ($values as $value) {
+            $state = ['objects' => []];
+            $serialized[] = [
+                'type' => gettype($value),
+                'meta' => _ddDescribeMeta($value),
+                'value' => _ddJsonEncode($value, [
+                    'maxDepth' => 5,
+                    'maxItems' => 200,
+                    'maxString' => 4000,
+                ], 0, $state),
+            ];
+        }
+
+        $payload = [
+            'debug' => true,
+            'context' => [
+                'file' => _ddShortenPath((string) $context['file']),
+                'line' => (int) $context['line'],
+                'time' => $context['time'],
+                'pid' => $context['pid'],
+                'memory' => _ddFormatBytes((int) $context['memory']),
+                'memory_bytes' => (int) $context['memory'],
+                'peak' => _ddFormatBytes((int) $context['peak']),
+                'peak_bytes' => (int) $context['peak'],
+            ],
+            'values' => $serialized,
+            'trace' => $trace,
+        ];
+
+        $encoded = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        if ($encoded === false) {
+            $encoded = json_encode([
+                'debug' => true,
+                'error' => 'unable to encode dump payload as JSON',
+                'json_error' => json_last_error_msg(),
+            ]);
+        }
+
+        echo $encoded;
+    }
+}
+
+if (!function_exists('_ddJsonEncode')) {
+    /**
+     * Recursively convert a value into a JSON-safe structure.
+     *
+     * @param array<string, int> $options
+     * @param array{objects: array<int, true>} $seen
+     */
+    function _ddJsonEncode(mixed $value, array $options, int $depth, array &$seen): mixed
+    {
+        if ($depth >= (int) $options['maxDepth']) {
+            return ['__truncated' => 'max depth reached'];
+        }
+
+        if ($value === null || is_bool($value) || is_int($value) || is_float($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            $length = _ddStringLength($value);
+            if ($length > (int) $options['maxString']) {
+                return _ddStringSlice($value, (int) $options['maxString']) . '...';
+            }
+            return $value;
+        }
+
+        if (is_resource($value) || gettype($value) === 'resource (closed)') {
+            return ['__resource' => get_resource_type($value) ?: 'resource'];
+        }
+
+        if (is_array($value)) {
+            $result = [];
+            $count = 0;
+            foreach ($value as $key => $item) {
+                if ($count++ >= (int) $options['maxItems']) {
+                    $result['__truncated'] = 'items truncated';
+                    break;
+                }
+                $result[$key] = _ddJsonEncode($item, $options, $depth + 1, $seen);
+            }
+            return $result;
+        }
+
+        if (is_object($value)) {
+            $objectId = spl_object_id($value);
+            if (isset($seen['objects'][$objectId])) {
+                return ['__recursion' => get_class($value) . '#' . $objectId];
+            }
+            $seen['objects'][$objectId] = true;
+
+            if ($value instanceof \JsonSerializable) {
+                try {
+                    return _ddJsonEncode($value->jsonSerialize(), $options, $depth + 1, $seen);
+                } catch (\Throwable) {
+                    // fall through to reflection
+                }
+            }
+
+            try {
+                $reflection = new \ReflectionObject($value);
+            } catch (\Throwable $throwable) {
+                return ['__class' => get_class($value), '__error' => 'reflection error: ' . $throwable->getMessage()];
+            }
+
+            $properties = ['__class' => $reflection->getName(), '__id' => $objectId];
+            $count = 0;
+            foreach ($reflection->getProperties() as $property) {
+                if ($count++ >= (int) $options['maxItems']) {
+                    $properties['__truncated'] = 'properties truncated';
+                    break;
+                }
+                try {
+                    $propertyValue = $property->getValue($value);
+                    $properties[$property->getName()] = _ddJsonEncode($propertyValue, $options, $depth + 1, $seen);
+                } catch (\Throwable $exception) {
+                    $properties[$property->getName()] = ['__inaccessible' => $exception->getMessage()];
+                }
+            }
+            return $properties;
+        }
+
+        return var_export($value, true);
     }
 }
 
@@ -306,7 +505,6 @@ if (!function_exists('_ddDump')) {
                         break;
                     }
 
-                    $property->setAccessible(true);
                     $visibility = $property->isPublic() ? 'public' : ($property->isProtected() ? 'protected' : 'private');
                     $label = _ddColor($colors, 'blue', $visibility) . ' ' . _ddColor($colors, 'yellow', '$' . $property->getName());
 

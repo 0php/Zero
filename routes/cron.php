@@ -8,3 +8,10 @@ use Zero\Lib\Console\Scheduling\Schedule;
 //     ->everyMinute()
 //     ->withoutOverlapping()
 //     ->description('Dispatch queued transactional emails');
+
+// Drain the default queue every minute (cron-only deployments).
+// See docs/queue.md for the full queue reference.
+// Schedule::command('queue:work', ['--once', '--queue=default'])
+//     ->everyMinute()
+//     ->withoutOverlapping()
+//     ->description('Drain default queue');

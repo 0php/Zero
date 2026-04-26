@@ -197,6 +197,24 @@ class S3Adapter
         return $status;
     }
 
+    /**
+     * Copy an object inside the same bucket.
+     *
+     * @param array<string, string> $headers Additional headers to apply to the new object
+     */
+    public function copyObject(string $sourceKey, string $destKey, array $headers = []): int
+    {
+        $headers['x-amz-copy-source'] = '/' . $this->bucket . '/' . ltrim($sourceKey, '/');
+
+        if ($this->defaultAcl && ! isset($headers['x-amz-acl']) && ! isset($headers['X-Amz-Acl'])) {
+            $headers['x-amz-acl'] = $this->defaultAcl;
+        }
+
+        [$status] = $this->request('PUT', $destKey, $headers, '');
+
+        return $status;
+    }
+
     public function listAllObjects(string $prefix = ''): \Generator
     {
         $token = null;

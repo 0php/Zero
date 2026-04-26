@@ -1,6 +1,167 @@
 # Mailer
 
-Zero Framework ships with a lightweight SMTP mailer that follows Laravel-style configuration while keeping the implementation dependency free. Messages are dispatched through the `Zero\Lib\Mail\Mailer` facade (`Mail`) so you can quickly compose notifications, password reset emails, or system alerts.
+Zero Framework ships with a lightweight SMTP mailer that follows Laravel-style configuration while keeping the implementation dependency free. Messages are dispatched through the `Zero\Lib\Mail\Mailer` facade (`Mail`).
+
+Implementation: [`Mailer.php`](../core/libraries/Mail/Mailer.php), [`Message.php`](../core/libraries/Mail/Message.php), [`Transport/SmtpTransport.php`](../core/libraries/Mail/Transport/SmtpTransport.php).
+
+---
+
+## Mailer API
+
+```php
+use Zero\Lib\Mail\Mailer;
+// or via the kernel alias:
+use Mail;
+```
+
+### `Mailer::send(Closure $callback): void`
+Build and send a message inside a closure. The closure receives a fresh `Message` (with the configured default `from` already applied).
+```php
+Mail::send(function ($message) {
+    $message
+        ->to('user@example.test', 'Tofik')
+        ->subject('Welcome!')
+        ->html(view('mail.welcome', ['name' => 'Tofik']));
+});
+```
+
+### `Mailer::raw(string $to, string $subject, string $body, bool $isHtml = false): void`
+Shortcut for one-line emails with no extra headers/attachments.
+```php
+Mail::raw('ops@example.test', 'Heartbeat', 'still alive');
+Mail::raw('user@example.test', 'Hi', '<b>hello</b>', isHtml: true);
+```
+
+### `Mailer::instance(): self`
+Get the underlying singleton. Rarely needed — `send()` and `raw()` cover the common cases.
+```php
+$mailer = Mailer::instance();
+```
+
+### `Mailer::reset(): void`
+Drop the singleton (mainly for tests when config has changed).
+```php
+Mailer::reset();
+```
+
+### `->dispatch(Closure $callback): void`
+Instance form of `send()`. The static `Mailer::send()` ultimately calls this.
+```php
+Mailer::instance()->dispatch(function ($message) {
+    $message->to($to)->subject($subject)->text($body);
+});
+```
+
+Both `send()` and `dispatch()` validate that the message has a `From` address (either configured default or set via `->from()`) and at least one recipient; otherwise they throw `Zero\Lib\Mail\MailException`.
+
+---
+
+## Message API
+
+The `Message` instance is what you build inside the `send()` callback. Every setter returns `$this` for chaining.
+
+### Recipients
+
+#### `->from(string $address, ?string $name = null): self`
+Override the configured default `from`.
+```php
+$message->from('no-reply@example.test', 'Zero Framework');
+```
+
+#### `->replyTo(string $address, ?string $name = null): self`
+```php
+$message->replyTo('support@example.test', 'Support Team');
+```
+
+#### `->to(string $address, ?string $name = null): self`
+Add a recipient. Call multiple times to send to multiple addresses.
+```php
+$message->to('alice@example.test')->to('bob@example.test', 'Bob');
+```
+
+#### `->cc(string $address, ?string $name = null): self`
+```php
+$message->cc('manager@example.test', 'Manager');
+```
+
+#### `->bcc(string $address, ?string $name = null): self`
+```php
+$message->bcc('audit@example.test');
+```
+
+### Subject & body
+
+#### `->subject(string $subject): self`
+```php
+$message->subject('Your invoice is ready');
+```
+
+#### `->text(string $body): self`
+Plain-text body.
+```php
+$message->text("Hi Tofik,\n\nThanks for signing up.\n");
+```
+
+#### `->html(string $body): self`
+HTML body. Pair with `view()` for templates.
+```php
+$message->html(view('mail.welcome', ['user' => $user]));
+```
+
+#### `->body(string $body, string $contentType): self`
+Low-level body setter (use this for non-text/html content types).
+```php
+$message->body($json, 'application/json');
+```
+
+### Headers
+
+#### `->header(string $name, string $value): self`
+Add a custom header.
+```php
+$message
+    ->header('X-Mailer', 'Zero/1.0')
+    ->header('X-Priority', '1');
+```
+
+### Attachments
+
+#### `->attach(string $filename, string $content, string $contentType = 'application/octet-stream'): self`
+Attach in-memory bytes. Build a multipart/mixed message automatically.
+```php
+$pdf = file_get_contents(storage_path('invoices/INV-42.pdf'));
+$message
+    ->subject('Your invoice')
+    ->html(view('mail.invoice', ['user' => $user]))
+    ->attach('INV-42.pdf', $pdf, 'application/pdf');
+```
+
+For a file on disk:
+```php
+$message->attach('report.csv', file_get_contents($path), 'text/csv');
+```
+
+### Inspectors (used by transports / tests)
+
+| Method | Returns |
+| --- | --- |
+| `->getFrom()` | `?array{address, name}` |
+| `->getReplyTo()` | `?array{address, name}` |
+| `->getTo()` / `->getCc()` / `->getBcc()` | `array<int, array{address, name}>` |
+| `->getSubject()` | `string` |
+| `->getBody()` | `string` |
+| `->getContentType()` | `string` |
+| `->getCustomHeaders()` | `array<string, string>` |
+| `->getAttachments()` | `array<int, array{filename, content, contentType}>` |
+| `->getEnvelopeRecipients()` | unique To + Cc + Bcc list |
+| `->toMimeString()` | full MIME representation (multipart when attachments present) |
+
+```php
+$envelope = $message->getEnvelopeRecipients();
+$rfc822   = $message->toMimeString();
+```
+
+---
 
 ## Configuration
 

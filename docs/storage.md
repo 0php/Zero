@@ -1,207 +1,424 @@
 # Storage
 
-Zero Framework ships with a light filesystem abstraction that keeps uploads, generated assets, and cached artefacts in one place. The `Zero\\Lib\\Storage\\Storage` facade resolves a configured disk (default `public`) and proxies basic file operations to the underlying driver.
+A filesystem abstraction for uploads, generated assets, and cached artefacts. The `Zero\Lib\Storage\Storage` facade resolves a configured disk and proxies the operation to the underlying driver. Two drivers ship in v1: **local** (POSIX filesystem) and **s3** (any S3-compatible bucket — AWS, MinIO, R2, DigitalOcean Spaces, Wasabi, etc.). Every method on the facade is also available directly on a disk instance via `Storage::disk('name')`.
+
+---
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Reading & writing](#reading--writing)
+- [File metadata](#file-metadata)
+- [Listing files & directories](#listing-files--directories)
+- [Deleting, copying, moving](#deleting-copying-moving)
+- [Streams](#streams)
+- [Visibility](#visibility)
+- [URLs & responses](#urls--responses)
+- [Working with `File` and `UploadedFile`](#working-with-file-and-uploadedfile)
+- [Driver behaviour notes](#driver-behaviour-notes)
+- [Authoring a custom driver](#authoring-a-custom-driver)
+
+---
+
+## Quick start
+
+```php
+use Zero\Lib\Storage\Storage;
+
+// Write
+Storage::put('reports/2026.csv', $csvString);
+
+// Read
+$body = Storage::get('reports/2026.csv');
+
+// Stream as the HTTP response
+return Storage::response('reports/2026.csv', null, [
+    'name' => 'sales-2026.csv',
+    'disposition' => 'attachment',
+]);
+```
+
+The disk used is the default (`config('storage.default')`). Pass an explicit disk name as the trailing argument to switch:
+
+```php
+Storage::put('reports/2026.csv', $csvString, 's3');
+```
+
+---
 
 ## Configuration
 
-The `config/storage.php` file describes the available disks. At the top of the file we cache `APP_URL` once and then return a clean array. You don’t need to set
+`config/storage.php`:
 
 ```php
-$appUrl = rtrim((string) env('APP_URL', 'http://127.0.0.1:8000'), '/');
-
 return [
     'default' => env('STORAGE_DISK', 'public'),
+
     'disks' => [
-        'public' => [
+        'local' => [
             'driver' => 'local',
-            'root' => env('STORAGE_PUBLIC_ROOT', storage_path('app/public')),
-            'url' => $appUrl . '/storage',
-            'visibility' => 'public',
-        ],
-        'private' => [
-            'driver' => 'local',
-            'root' => env('STORAGE_PRIVATE_ROOT', storage_path('app/private')),
-            'url' => $appUrl . '/files/private',
+            'root' => storage_path('app'),
+            'url' => null,
             'visibility' => 'private',
         ],
+
+        'public' => [
+            'driver' => 'local',
+            'root' => storage_path('app/public'),
+            'url' => env('APP_URL') . '/storage',
+            'visibility' => 'public',
+        ],
+
         's3' => [
             'driver' => 's3',
-            'key' => env('S3_ACCESS_KEY'),
-            'secret' => env('S3_SECRET_KEY'),
-            'region' => env('S3_REGION', 'us-east-1'),
-            'signing_region' => env('S3_SIGNING_REGION'),
-            'bucket' => env('S3_BUCKET'),
-            'endpoint' => env('S3_ENDPOINT'),
-            'path_style' => filter_var(env('S3_PATH_STYLE', true), FILTER_VALIDATE_BOOLEAN),
-            'acl' => env('S3_DEFAULT_ACL', 'private'),
-            'root' => env('S3_ROOT_PATH', ''),
-            'timeout' => (int) env('S3_TIMEOUT', 60),
-            'signature_version' => strtolower((string) env('S3_SIGNATURE_VERSION', 'auto')),
-            'visibility' => env('S3_VISIBILITY', 'private'),
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+            'bucket' => env('AWS_BUCKET'),
+            'endpoint' => env('AWS_ENDPOINT'),       // optional, e.g. MinIO/R2
+            'path_style' => env('AWS_PATH_STYLE', true),
+            'acl' => env('AWS_ACL'),                 // optional default ACL
+            'root' => env('AWS_PREFIX', ''),         // optional bucket-prefix
         ],
-    ],
-    'links' => [
-        public_path('storage') => 'public',
     ],
 ];
 ```
 
-Requesting an undefined disk throws an `InvalidArgumentException`, so keep the configuration in sync with your usage. The optional `visibility` key is consumed by helper methods such as `File::getUrl()` to decide whether a direct link or a signed URL should be returned.
+### Disk roles
 
-Temporary URLs are signed using your application's `APP_KEY`, so keep it secret and unique per environment. The framework automatically exposes signed private files under `/files/private/{path}` guarded by the `ValidateStorageSignature` middleware.
+The convention used by the bundled scaffolding:
 
-## Writing Files
+| Disk | Driver | Purpose |
+| --- | --- | --- |
+| `local` | local | Private artefacts (uploads pending moderation, cache, generated PDFs, log archives) |
+| `public` | local | Files that need a stable URL — browser access via `public/storage` symlink (`php zero storage:link`) |
+| `s3` | s3 | Production storage backed by any S3-compatible bucket |
+
+You can define as many disks as you like; the facade resolves them by name.
+
+### S3 endpoints for non-AWS providers
 
 ```php
-use Zero\\Lib\\Storage\\Storage;
+// MinIO
+'endpoint' => 'http://minio.local:9000',
+'path_style' => true,
 
-$path = Storage::put('reports/latest.txt', "Report generated at " . date('c'));
-// $path === 'reports/latest.txt'
+// Cloudflare R2
+'endpoint' => 'https://{account_id}.r2.cloudflarestorage.com',
+'region' => 'auto',
+'path_style' => false,
 
-$file = Zero\Lib\Filesystem\File::fromUrl('https://example.com/logo.png');
-Storage::put('assets/logo.png', $file, 'public');
+// DigitalOcean Spaces
+'endpoint' => 'https://nyc3.digitaloceanspaces.com',
+'region' => 'nyc3',
+'path_style' => false,
 
-Storage::put('media/banner.jpg', $file, 's3');
+// Wasabi
+'endpoint' => 'https://s3.wasabisys.com',
+'region' => 'us-east-1',
 ```
 
-All paths are relative to the disk root; use helper functions such as `storage_path()` when you need the absolute location.
+---
 
-## Reading Files
+## Reading & writing
 
-Fetch file contents directly through the facade:
-
+### `Storage::put(string $path, string|File $contents, ?string $disk = null): string`
+Write raw contents (or a `File` instance) and return the stored relative path.
 ```php
-$contents = Storage::get('reports/latest.txt');
+Storage::put('logs/today.txt', 'Hello world');
+Storage::put('avatars/user-42.jpg', $uploadedFile);
+Storage::put('archive/snapshot.json', $jsonBlob, 's3');
 ```
 
-Call `Storage::disk('private')->get(...)` (or `'public'`, `'s3'`) to read from a non-default disk. The method throws a `RuntimeException` if the file is missing or unreadable, which makes error handling explicit in CLI scripts and controllers.
-
-Need to stream the file back to the browser without loading it fully into memory? Use `Storage::response($path, $disk)` to return a `Response` that streams the file contents and sets sane headers:
-
+### `Storage::get(string|File $path, ?string $disk = null): string`
+Return the contents as a string. Throws `RuntimeException` if the path is missing or unreadable.
 ```php
-return Storage::response('reports/latest.txt', 'private');
+$csv = Storage::get('reports/2026.csv');
 ```
 
-## Checking Files
-
+### `Storage::exists(string $path, ?string $disk = null): bool`
 ```php
-if (Storage::exists('reports/latest.txt')) {
+if (Storage::exists('exports/finished.flag')) {
     // ...
 }
 ```
 
-Pass a second argument (or use `Storage::disk('public')`) to target a different disk. The method returns `false` for directories; it is designed for files.
-
-## Listing Files
-
-List the files immediately within a directory. Each entry is returned as a `Zero\Lib\Filesystem\File` instance. Remote S3 objects are represented by lightweight in-memory virtual files so no local cache or sidecar JSON is written:
-
+### `Storage::putFile(string $directory, File $file, ?string $disk = null): string`
+Store a `File`/`UploadedFile` inside `$directory`, generating a unique filename derived from the original.
 ```php
-$files = Storage::files('reports');
+$path = Storage::putFile('uploads', $request->file('photo'));
+// uploads/photo-65f2a9e1b8d2.jpg
+```
 
-foreach ($files as $file) {
-    $basename = $file->getBasename();
-    $signedUrl = $file->getSignedUrl('+10 minutes', 'private');
+### `Storage::putFileAs(string $directory, File $file, string $name, ?string $disk = null): string`
+Same as above but pins the filename.
+```php
+Storage::putFileAs('avatars', $request->file('photo'), 'user-42.jpg');
+```
+
+### `Storage::prepend(string $path, string $data, ?string $disk = null): string`
+Prepend `$data` to the file. Creates the file if it doesn't exist.
+```php
+Storage::prepend('logs/today.txt', "[start] {$now}\n");
+```
+
+### `Storage::append(string $path, string $data, ?string $disk = null): string`
+Append `$data` to the file. Creates the file if it doesn't exist.
+```php
+Storage::append('logs/today.txt', $logLine . "\n");
+```
+
+> ⚠️ On the S3 driver, `prepend()` and `append()` are read-modify-write — the entire object is downloaded, modified in memory, and re-uploaded. Cheap for small files, expensive for large ones, **not atomic** under concurrent writers.
+
+---
+
+## File metadata
+
+### `Storage::size(string $path, ?string $disk = null): int`
+File size in bytes. Throws if the path is missing.
+```php
+$bytes = Storage::size('reports/2026.csv');
+```
+
+### `Storage::lastModified(string $path, ?string $disk = null): int`
+Last-modified time as a Unix timestamp.
+```php
+$age = time() - Storage::lastModified('exports/finished.flag');
+```
+
+### `Storage::mimeType(string $path, ?string $disk = null): string`
+Best-effort MIME type. Falls back to `application/octet-stream` when detection fails.
+```php
+Storage::mimeType('avatars/user-42.jpg');  // image/jpeg
+```
+
+> On the S3 driver, `size()`, `lastModified()`, and `mimeType()` are pulled from `HEAD` response headers — no body download.
+
+---
+
+## Listing files & directories
+
+### `Storage::files(string $directory = '', bool $recursive = false, ?string $disk = null): array`
+Return `File`/`RemoteFile` instances for every file under `$directory`.
+```php
+foreach (Storage::files('uploads') as $file) {
+    echo $file->getFilename();
 }
 
-$private = Storage::files('reports', disk: 'private');
+// Recursive
+$all = Storage::files('uploads', true);
 ```
 
-Passing `true` as the second argument returns every descendant file (still as `File` instances):
-
+### `Storage::directories(string $directory = '', bool $recursive = false, ?string $disk = null): array`
+Return relative directory paths (strings, not `File` objects). On S3 this is derived from common prefixes — there are no real directories.
 ```php
-$tree = Storage::files('reports', true);
-
-$nested = Storage::files('reports', true, 'private');
-// or Storage::files('reports', recursive: true, disk: 'private');
+Storage::directories('docs');         // ['docs/2024', 'docs/2025']
+Storage::directories('', true);       // every prefix in the disk
 ```
 
-`Storage::list(...)` is an alias for `Storage::files(...)`. A missing directory results in an empty array.
-
-## Generating URLs
-
-Use `Storage::url()` to build a publicly accessible URL for a file when the disk advertises a base URL (configure `disks.*.url` in `config/storage.php` or adjust `APP_URL`). It falls back to the absolute filesystem path when no URL is available.
-
+### `Storage::makeDirectory(string $path, ?string $disk = null): bool`
+Create a directory. On S3 this writes a 0-byte placeholder ending in `/` so the prefix shows up in console UIs.
 ```php
-$link = Storage::url('reports/latest.txt');
+Storage::makeDirectory('exports/2026/Q1');
 ```
 
-### Temporary URLs
+---
 
-To grant time-limited access, request a signed URL:
+## Deleting, copying, moving
 
+### `Storage::delete(string|array $paths, ?string $disk = null): bool`
+Delete one or many files. Missing files count as success — the desired state is "gone".
 ```php
-$signed = Storage::temporaryUrl('reports/latest.txt', Zero\Lib\Support\DateTime::parse('+10 minutes'), 'private');
+Storage::delete('logs/today.txt');
+Storage::delete(['a.txt', 'b.txt', 'c.txt']);
 ```
 
-The helper appends `path`, `expires`, and `signature` query parameters using your `APP_KEY`. Validate these parameters inside your download endpoint or middleware before streaming the file (see `App\Middlewares\ValidateStorageSignature`).
-
-### Middleware
-
-`App\Middlewares\ValidateStorageSignature` encapsulates the verification logic so you can reuse it anywhere you expose signed downloads. The private file route enables it automatically, but you can also attach it to custom endpoints or route groups.
-
-The middleware accepts the `path` query string produced by `Storage::temporaryUrl()` or a custom request attribute (`Request::set('storage.signed.path', $resource)`), giving you flexibility over how the resource path is resolved. Internally it validates the signature using `APP_KEY`, checks that the link has not expired, and returns a 403 response if the checks fail. Pair it with the `private` disk to keep sensitive files off the public symlink.
-
-When you use the `s3` disk, nothing is written to `storage/meta` or `storage/app/cache`; file context (e.g. size, etag) is kept in-memory with the listing.
-
-## Working With Uploads
-
-Uploaded files are represented by `Zero\\Lib\\Http\\UploadedFile` and expose convenience helpers that integrate with the storage facade.
-
+### `Storage::deleteDirectory(string $directory, ?string $disk = null): bool`
+Recursively wipe a directory. On S3 this iterates every object under the prefix and issues a delete — there's no native single-call equivalent.
 ```php
-$avatar = Request::file('avatar');
+Storage::deleteDirectory('exports/2025');
+```
 
-if ($avatar && $avatar->isValid()) {
-    $stored = $avatar->store('avatars');
-    // avatars/slug-64d2c6b1e5c3.jpg
+> The S3 driver refuses to delete the empty directory (`''`) — that would wipe the entire bucket. Pass an explicit prefix.
+
+### `Storage::copy(string $from, string $to, ?string $disk = null): bool`
+Copy a file inside the same disk. Returns `false` when the source is missing.
+```php
+Storage::copy('uploads/draft.pdf', 'archive/draft-' . time() . '.pdf');
+```
+
+### `Storage::move(string $from, string $to, ?string $disk = null): bool`
+Move (rename) a file inside the same disk.
+```php
+Storage::move('uploads/temp/photo.jpg', 'avatars/user-42.jpg');
+```
+
+> Both `copy()` and `move()` operate on a single disk. To move a file *between* disks, read from one and write to the other:
+> ```php
+> Storage::put('archive/file.pdf', Storage::get('uploads/file.pdf', 'public'), 's3');
+> Storage::delete('uploads/file.pdf', 'public');
+> ```
+
+---
+
+## Streams
+
+Use streams when files are large enough that loading them entirely into memory matters (videos, backups, analytics dumps).
+
+### `Storage::readStream(string $path, ?string $disk = null)`
+Open the file/object for reading. Returns a PHP stream resource — the **caller** is responsible for `fclose()`.
+```php
+$stream = Storage::readStream('videos/talk.mp4', 's3');
+while (! feof($stream)) {
+    echo fread($stream, 65536);
 }
+fclose($stream);
 ```
 
-Validate incoming uploads with the built-in rules before persisting them:
+### `Storage::writeStream(string $path, $stream, ?string $disk = null): string`
+Pipe a readable stream into the disk. Does **not** close the source stream.
+```php
+$src = fopen('php://input', 'rb');
+Storage::writeStream('uploads/raw-body.bin', $src);
+fclose($src);
+```
+
+> The S3 driver's `writeStream()` buffers the entire stream in memory before uploading (the underlying adapter doesn't yet support multipart uploads). For genuinely large files, save to a `File` first and use `Storage::putFile()` / `Storage::put()`.
+
+---
+
+## Visibility
+
+Visibility is a portable abstraction over per-driver permission models:
+
+| Driver | `public` | `private` |
+| --- | --- | --- |
+| local | `0664` (file) / `0775` (dir) | `0600` (file) / `0700` (dir) |
+| s3 | `public-read` ACL | `private` ACL |
+
+### `Storage::setVisibility(string $path, string $visibility, ?string $disk = null): bool`
+```php
+Storage::setVisibility('avatars/user-42.jpg', 'public', 's3');
+Storage::setVisibility('reports/draft.pdf', 'private');
+```
+
+### `Storage::getVisibility(string $path, ?string $disk = null): string`
+Returns `'public'` or `'private'`.
+```php
+$mode = Storage::getVisibility('uploads/photo.jpg');
+```
+
+> S3's `getVisibility()` is best-effort — many providers don't surface ACL via `HEAD`, and the driver returns `'private'` as the safe default. Don't use it for security checks; rely on bucket policies and signed URLs instead.
+
+---
+
+## URLs & responses
+
+### `Storage::url(string $path, ?string $disk = null): string`
+A direct URL to the file. On the local driver this returns the configured `url` prefix joined to the path; on S3 it returns a 5-minute presigned GET URL.
+```php
+Storage::url('avatars/user-42.jpg');
+// local: https://example.com/storage/avatars/user-42.jpg
+// s3:    https://bucket.s3.amazonaws.com/avatars/user-42.jpg?X-Amz-Algorithm=...
+```
+
+### `Storage::temporaryUrl(string $path, DateTimeInterface|int $expiration, ?string $disk = null): string`
+A signed URL that expires. Pass either an absolute timestamp or seconds-from-now (when given a positive int). On the local driver this produces an HMAC-signed URL the application's storage controller verifies before serving the file.
+```php
+Storage::temporaryUrl('reports/2026.csv', now()->addMinutes(15));
+Storage::temporaryUrl('reports/2026.csv', 300);              // 5 min
+```
+
+### `Storage::response(string $path, ?string $disk = null, array $options = []): Response`
+Build an HTTP `Response` that streams the file inline (browser-displayed) or as an attachment (download).
 
 ```php
-$data = Request::validate([
-    'avatar' => ['required', 'file', 'image', 'mimes:jpg,png', 'max:2048'],
+return Storage::response('reports/2026.csv', null, [
+    'name' => 'sales-2026.csv',
+    'disposition' => 'attachment',     // or 'inline'
+    'headers' => ['Cache-Control' => 'public, max-age=3600'],
 ]);
 ```
 
-`file` ensures the payload is a valid `UploadedFile`, `image` restricts the MIME type to `image/*`, `mimes` checks the extension, and `min`/`max` interpret their limits in kilobytes when applied to files.
+The S3 driver streams chunks directly — no intermediate buffering — so this is suitable for large files.
 
-Need to control the filename or disk?
+---
 
-```php
-$avatar->storeAs('avatars', $avatar->hashedName(), disk: 'private');
-```
+## Working with `File` and `UploadedFile`
 
-Both `store()` and `storeAs()` return the relative path written to the disk. Pass the optional disk name (`Storage::disk('private')` or `$file->store('docs', 'private')`) to separate public assets from private documents.
-
-## Additional Disks
-
-Add new entries under the `disks` array to extend storage locations (for example, a dedicated public disk for CDN assets). Retrieval looks like:
+Storage operations accept both raw paths and Zero's filesystem objects:
 
 ```php
-Storage::disk('public')->put('assets/app.js', $compiled);
+use Zero\Lib\Filesystem\File;
+
+// File created from a local path
+$file = File::fromPath('/tmp/inbound.csv');
+Storage::put('imports/inbound.csv', $file);
+
+// UploadedFile straight off the request
+$upload = $request->file('avatar');
+Storage::putFile('avatars', $upload);
+
+// File instances from a listing
+foreach (Storage::files('uploads') as $file) {
+    if ($file->getMimeType() === 'image/png') {
+        Storage::move($file->getStoragePath(), "approved/{$file->getBasename()}");
+    }
+}
 ```
 
-Implement custom drivers by updating `Zero\\Lib\\Storage\\StorageManager::createDriver()` to resolve new driver strings.
+Listing operations return `File` (local) or `RemoteFile` (S3) — both expose the same metadata accessors (`getFilename`, `getMimeType`, `getSize`, etc.) plus a `getStoragePath()` you can pass straight back to `Storage::*`.
 
-## Symlinking Disks
+---
 
-```bash
-php zero storage:link
+## Driver behaviour notes
+
+A few places where the two drivers behave differently:
+
+| Operation | Local | S3 |
+| --- | --- | --- |
+| `prepend` / `append` | True append at the OS level | Read-modify-write the entire object (not atomic) |
+| `directories()` | Real directory entries | Derived from object key prefixes |
+| `makeDirectory()` | Real `mkdir` | 0-byte placeholder key ending in `/` |
+| `deleteDirectory('')` | Wipes the disk root | **Refused** — returns false (avoid bucket-wipe) |
+| `getVisibility()` | Reads POSIX permissions | Returns `'private'` as a safe default |
+| `writeStream()` | Streams chunk-by-chunk | Buffers fully in memory before upload |
+| `url()` | Configured base URL or path | 5-minute presigned URL |
+
+When in doubt, the local driver is the source of truth — its semantics match what most code expects.
+
+---
+
+## Authoring a custom driver
+
+Custom drivers should expose the same surface as `LocalStorage` / `S3Storage` so the facade can call through. The contract is implicit (no formal interface in v1) but the methods are:
+
+```
+put(string $path, string|File $contents): string
+putFile(string $directory, File $file): string
+putFileAs(string $directory, File $file, string $name): string
+get(string|File $path): string
+exists(string $path): bool
+files(string $directory = '', bool $recursive = false): array
+directories(string $directory = '', bool $recursive = false): array
+makeDirectory(string $path): bool
+delete(string|array $paths): bool
+deleteDirectory(string $directory): bool
+copy(string $from, string $to): bool
+move(string $from, string $to): bool
+prepend(string $path, string $data): string
+append(string $path, string $data): string
+size(string $path): int
+lastModified(string $path): int
+mimeType(string $path): string
+readStream(string $path)
+writeStream(string $path, $stream): string
+setVisibility(string $path, string $visibility): bool
+getVisibility(string $path): string
+url(string $path): string
+temporaryUrl(string $path, DateTimeInterface|int $expiration): string
+response(string $path, array $options = []): Response
 ```
 
-The command reads `config/storage.php['links']` and creates symbolic links so web servers can read from non-public roots (defaults to mapping `public/storage` to the `public` disk). Ensure the process has permission to create the link path.
-
-## Roadmap
-
-- Support streaming reads/writes for large files.
-- Add convenience helpers (delete, directories) across drivers.
-- Document custom driver development once additional backends are available.
-
-## Related APIs
-
-- `Zero\\Lib\\Filesystem\\File` – general-purpose filesystem helper used by storage drivers and application code.
-- `Zero\\Lib\\Storage\\Drivers\\LocalStorage` – default driver implementation.
-- `Zero\\Lib\\Http\\UploadedFile` – upload wrapper that delegates persistence to storage disks.
-- `Zero\\Lib\\Console\\Commands\\StorageLinkCommand` – CLI helper for creating symlinks.
+Register the driver by extending `StorageManager` (or instantiating it manually and wiring it into your bootstrap). A future revision will introduce a formal `DiskInterface` so the contract is enforceable; treat the list above as the working contract until then.

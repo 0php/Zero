@@ -28,7 +28,7 @@
 - [x] Break query builder into focused components (clauses, compilers, relations) under `Zero\\Lib\\DB`
 - [x] Extract router route collection and middleware pipeline into dedicated classes
 - [x] Restructure CLI commands into separate command classes with a dispatcher
-- [ ] Move helper utilities into grouped support modules (e.g., `Support/Arr`, `Support/Str`)
+- [x] Move helper utilities into grouped support modules (e.g., `Support/Arr`, `Support/Str`, `Support/Collection`, `Support/Number`)
 - [x] Introduce validation layer (validator factory, rule classes, request helpers)
 
 ## Error Handling
@@ -41,6 +41,18 @@
 ## Mailable
 
 - [ ] Create mailable custom services
+
+## Queue
+
+- [x] Job contract + JSON payload serializer with model rehydration
+- [x] `sync` and `database` drivers with retry/backoff and `failed_jobs` storage
+- [x] `queue:work` worker (with `--once`, multi-queue priority, graceful SIGTERM/SIGINT)
+- [x] Operator commands: `make:job`, `queue:retry`, `queue:forget`, `queue:flush`, `queue:table`
+- [x] `Dispatchable` trait + `dispatch()` global helper
+- [x] `dispatchAfterResponse()` for fire-after-response work without a worker
+- [ ] Job middleware (rate-limit, unique)
+- [ ] Redis driver
+- [ ] Per-job timezone overrides
 
 ## I18n / Translation
 

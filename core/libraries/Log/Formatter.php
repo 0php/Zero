@@ -237,7 +237,6 @@ final class Formatter
                 $lines[] = $nextIndent . self::color($colors, 'muted', '// no properties');
             } else {
                 foreach ($properties as $property) {
-                    $property->setAccessible(true);
                     $visibility = $property->isPublic() ? 'public' : ($property->isProtected() ? 'protected' : 'private');
                     $label = self::color($colors, 'blue', $visibility) . ' ' . self::color($colors, 'yellow', '$' . $property->getName());
 

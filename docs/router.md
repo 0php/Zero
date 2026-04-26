@@ -1,148 +1,207 @@
 # Routing
 
-The router orchestrates HTTP traffic by mapping URIs to controller methods, executing middleware, and normalising responses.
-
-## Defining Routes
-
-Routes live in `routes/web.php` and use familiar HTTP verb helpers. You can call them through `Zero\Lib\Router` (or the `Route` alias if you prefer a Laravel-style API):
+The router maps URIs to controller actions, runs middleware, and normalises responses. Implementation: [`core/libraries/Router/Router.php`](../core/libraries/Router/Router.php).
 
 ```php
 use Zero\Lib\Router;
-use App\Controllers\HomeController;
-
-Router::get('/', [HomeController::class, 'index']);
-Router::post('/profiles', [ProfilesController::class, 'store']);
 ```
 
-## Route Groups, Prefixes, and Middleware
+Every verb method returns a `RouteDefinition` you can chain on (`->name()`, `->middleware()`).
 
-Group routes with shared attributes:
+---
 
+## Defining routes
+
+### `Router::get(string $route, array $action, mixed $middlewares = null): RouteDefinition`
+Register a GET route.
 ```php
-Router::group(['prefix' => '/dashboard', 'middleware' => AuthMiddleware::class], function () {
-    Router::get('/', [DashboardController::class, 'index']);
-    Router::get('/reports', [ReportsController::class, 'index']);
+use App\Controllers\UserController;
+
+Router::get('/users', [UserController::class, 'index']);
+Router::get('/users/{id}', [UserController::class, 'show']);
+```
+
+### `Router::post(string $route, array $action, mixed $middlewares = null): RouteDefinition`
+```php
+Router::post('/users', [UserController::class, 'store']);
+```
+
+### `Router::put(string $route, array $action, mixed $middlewares = null): RouteDefinition`
+```php
+Router::put('/users/{id}', [UserController::class, 'update']);
+```
+
+### `Router::patch(string $route, array $action, mixed $middlewares = null): RouteDefinition`
+```php
+Router::patch('/users/{id}', [UserController::class, 'patch']);
+```
+
+### `Router::delete(string $route, array $action, mixed $middlewares = null): RouteDefinition`
+```php
+Router::delete('/users/{id}', [UserController::class, 'destroy']);
+```
+
+### Path parameters
+
+Wrap segments in `{}`. They're injected by name into the controller signature.
+```php
+// routes/web.php
+Router::get('/users/{id}/posts/{postId}', [PostController::class, 'show']);
+
+// app/controllers/PostController.php
+public function show(int $id, int $postId, Request $request) { /* ... */ }
+```
+
+The shared `Request` instance is auto-injected when type-hinted.
+
+---
+
+## Route groups
+
+### `Router::group(array $attributes, callable $callback): void`
+Apply shared `prefix`, `middleware`, and `name` to a batch of routes.
+```php
+Router::group(['prefix' => '/admin', 'middleware' => 'auth'], function () {
+    Router::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+    Router::post('/users', [AdminUserController::class, 'store'])->name('users.store');
 });
 ```
 
-- `prefix` strings are concatenated for nested groups.
-- `middleware` can be a single class or an array. Each middleware class must expose a `handle()` method.
-
-## Parameter Binding
-
-Path segments wrapped in `{}` are captured and passed to the controller in order. The router uses reflection to type-cast route parameters:
-
+Groups can nest:
 ```php
-Router::get('/users/{id}', [UsersController::class, 'show']);
+Router::group(['prefix' => '/api/v1', 'name' => 'api.'], function () {
+    Router::group(['middleware' => 'auth'], function () {
+        Router::get('/me', [MeController::class, 'show'])->name('me');
+        // → name 'api.me', URI '/api/v1/me'
+    });
+});
 ```
 
+---
+
+## Domains
+
+### `Router::domain(string|array $domains): DomainRouteGroup`
+Route by host. Supports a single domain or a list.
 ```php
-class UsersController
-{
-    public function show(int $id)
-    {
-        return DBML::table('users')->where('id', $id)->first();
-    }
-}
+Router::domain('admin.example.com')->group(function () {
+    Router::get('/', [AdminDashboardController::class, 'index']);
+});
+
+Router::domain(['{tenant}.example.com'])->group(function () {
+    Router::get('/dashboard', [TenantDashboardController::class, 'index']);
+}, ['middleware' => 'tenant']);
 ```
 
-## Dependency Injection
+The host's wildcard segments (e.g. `{tenant}`) are passed to the controller alongside path parameters.
 
-Controllers and middleware can type-hint `Zero\Lib\Http\Request`. The router detects non-built-in parameter types and injects the shared request instance automatically.
+---
 
-## Middleware Short-Circuiting
+## Naming routes
 
-If a middleware returns a value, the router resolves it into a `Response` and stops invoking further middlewares or the controller. This pattern is ideal for authentication checks:
+### `RouteDefinition::name(string $name): self`
+```php
+Router::get('/users/{id}', [UserController::class, 'show'])->name('users.show');
+```
+
+Build URLs with the global `route()` helper or `Router::route()`:
+```php
+route('users.show', ['id' => 42]);                       // '/users/42'
+Router::route('users.show', ['id' => 42], absolute: true);
+```
+
+### `Router::route(string $name, array $parameters = [], bool $absolute = true): string`
+```php
+$url = Router::route('users.show', ['id' => 42]); // 'http://example.test/users/42'
+```
+
+---
+
+## Middleware
+
+Middlewares are FQCNs; each must expose a `handle(Request $request, Closure $next): mixed`. A short-circuit (returning a `Response`) bypasses the next layer.
+
+### `RouteDefinition::middleware(mixed $middlewares): self`
+Attach one or more.
+```php
+Router::get('/dashboard', [HomeController::class, 'index'])
+    ->middleware(\App\Middlewares\Auth::class);
+
+Router::post('/users', [UserController::class, 'store'])
+    ->middleware([\App\Middlewares\Auth::class, \App\Middlewares\VerifyCsrf::class]);
+```
+
+### `Router::appendRouteMiddleware(string $method, string $path, mixed $middlewares): void`
+Internal helper used by groups; you generally don't call this directly.
+
+### Example middleware
 
 ```php
+namespace App\Middlewares;
+
+use Closure;
+use Zero\Lib\Auth\Auth;
+use Zero\Lib\Http\Request;
+use Zero\Lib\Http\Response;
+
 class AuthMiddleware
 {
-    public function handle(Request $request)
+    public function handle(Request $request, Closure $next): mixed
     {
-        if (!Session::has('user')) {
+        if (! Auth::user()) {
             return Response::redirect('/login');
         }
-
-        Request::set('current_user', Session::get('user'));
+        return $next($request);
     }
 }
 ```
 
-Middleware can use request attributes to share expensive work with controllers or subsequent middleware. See [Request Attributes](request-response.md#request-attributes) for the full API.
+---
 
-You can also pass parameters to middleware when registering routes:
+## Dispatch
 
+### `Router::dispatch(string $requestUri, string $requestMethod): Response`
+Resolve a request to a `Response`. Called by [`public/index.php`](../public/index.php); you don't normally call it yourself.
 ```php
-Router::group(['middleware' => [AuthMiddleware::class, [RoleMiddleware::class, 'admin']]], function () {
-    Router::get('/dashboard', [DashboardController::class, 'index']);
-});
+$response = Router::dispatch($_SERVER['REQUEST_URI'], $_SERVER['REQUEST_METHOD']);
+$response->send();
 ```
 
-In this example `RoleMiddleware::handle()` receives the current request followed by `'admin'`. Any additional arguments declared after the request will be resolved from the route definition order.
-
-### Group Name Prefixes
-
-Route groups accept a `name` attribute that composes a dot-notated prefix for every nested route:
-
+### `Router::getRoutes(): array`
+Inspect the registered route table (useful for `route:list`-style tooling).
 ```php
-Router::group(['prefix' => '/auth', 'name' => 'auth'], function () {
-    Router::get('/login', [AuthController::class, 'showLogin'])->name('login.show');
-    Router::post('/login', [AuthController::class, 'login'])->name('login.attempt');
-});
+foreach (Router::getRoutes() as $method => $byPath) {
+    foreach ($byPath as $path => $route) {
+        echo "$method $path\n";
+    }
+}
 ```
 
-The example above registers the `auth.login.show` and `auth.login.attempt` route names while still applying the `/auth` URI prefix.
+### `Router::registerRouteName(string $method, string $path, string $name, string $prefix = ''): void`
+Internal API used by `RouteDefinition::name()` to wire names into the registry.
 
-## Domain Routing
+---
 
-You can scope route groups to one or more domains by providing a `domain` (single string) or `domains` (array) attribute:
-
-```php
-Router::group(['middleware' => [RoleMiddleware::class], 'name' => 'role', 'domains' => ['id.zero.local']], function () {
-    // Routes here only respond on id.zero.local
-});
-
-Router::group(['middleware' => [RoleMiddleware::class], 'name' => 'role', 'domain' => 'nl.zero.local'], function () {
-    // Routes here only respond on nl.zero.local
-});
-```
-
-There is also a fluent helper for domain groups:
+## Putting it together
 
 ```php
-Router::domain(['id.zero.local', 'nl.zero.local'])->group(function () {
-    // Routes respond on either domain.
+// routes/web.php
+use App\Controllers\Auth\AuthController;
+use App\Controllers\UserController;
+use App\Middlewares\Auth as AuthMiddleware;
+use Zero\Lib\Router;
+
+Router::get('/login',  [AuthController::class, 'showLoginForm'])->name('login');
+Router::post('/login', [AuthController::class, 'login']);
+
+Router::group(['middleware' => AuthMiddleware::class], function () {
+    Router::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Router::group(['prefix' => '/users', 'name' => 'users.'], function () {
+        Router::get('/',         [UserController::class, 'index'])->name('index');
+        Router::get('/{id}',     [UserController::class, 'show'])->name('show');
+        Router::put('/{id}',     [UserController::class, 'update'])->name('update');
+        Router::delete('/{id}',  [UserController::class, 'destroy'])->name('destroy');
+    });
 });
-
-Router::domain('nl.zero.local')->group(function () {
-    // Routes respond only on nl.zero.local.
-});
 ```
-
-Domain matching uses the request host header and ignores ports. Nested domain groups intersect (a child group can further narrow the allowed hosts).
-
-## Named Routes and URL Generation
-
-Assign a name to any route definition to reference it later:
-
-```php
-Router::get('/profile/{user}', [ProfileController::class, 'show'])
-    ->name('profile.show');
-```
-
-- Route names must be unique; reusing a name for a different path or HTTP verb raises an exception during bootstrap.
-- Nested group prefixes automatically prepend to route names (see [Group Name Prefixes](#group-name-prefixes)).
-
-Generate URLs via the global `route($name, $parameters = [], $absolute = true)` helper or the underlying `Router::route()` method:
-
-```php
-$url = route('profile.show', ['user' => 42]); // https://example.com/profile/42
-
-Response::redirectRoute('profile.show', ['user' => 42]);
-```
-
-Placeholders are replaced with URL-encoded parameters and removed from the query string. Any remaining array values are appended as standard `?key=value` pairs. Pass `false` as the third argument to receive a relative path (`/profile/42`).
-
-## Error Handling
-
-Unexpected exceptions during route matching or controller execution are logged via the configurable logger and rendered through the central error handler (JSON for API clients, HTML error views otherwise).

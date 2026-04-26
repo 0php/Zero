@@ -13,7 +13,11 @@ $aliases = [
     'Route' => Zero\Lib\Router::class,
     'Mail' => Zero\Lib\Mail\Mailer::class,
     'Log' => Zero\Lib\Log::class,
+    'Queue' => Zero\Lib\Queue\Queue::class,
     'Str' => Zero\Lib\Support\Str::class,
+    'Arr' => Zero\Lib\Support\Arr::class,
+    'Collection' => Zero\Lib\Support\Collection::class,
+    'Number' => Zero\Lib\Support\Number::class,
     'Validator' => Zero\Lib\Validation\Validator::class,
 ];
 

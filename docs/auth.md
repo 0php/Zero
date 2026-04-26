@@ -1,8 +1,83 @@
 # Authentication
 
-Zero Framework now ships with a Laravel-style authentication flow covering registration, email verification, login, logout, and password resets. The stack remains dependency-free and relies on the framework's JWT-based session cookie and SMTP mailer.
+Zero Framework ships with a Laravel-style authentication flow covering registration, email verification, login, logout, and password resets. The stack is dependency-free and relies on a JWT-based session cookie and the SMTP mailer.
 
-## Overview
+The runtime API is the `Auth` facade ([`core/libraries/Auth/Auth.php`](../core/libraries/Auth/Auth.php)) plus the JWT codec ([`core/libraries/Auth/Jwt.php`](../core/libraries/Auth/Jwt.php)). The rest of this page covers the controllers, views, and database schema that the scaffold provides.
+
+---
+
+## Auth API reference
+
+```php
+use Zero\Lib\Auth\Auth;
+```
+
+### `Auth::login(array $payload, int $ttl = self::DEFAULT_TTL): void`
+Issue a JWT with the given payload and queue it as an HTTP-only cookie. Use the user's primary key as the `sub` claim.
+```php
+Auth::login(['sub' => $user->id, 'email' => $user->email]);
+Auth::login(['sub' => $user->id], ttl: 3600); // 1-hour session
+```
+
+`$ttl` is clamped to a minimum of 60 seconds. When `$ttl` is left at the default, `config('auth.token_ttl')` (env: `AUTH_TOKEN_TTL`) is honored — default 7 days.
+
+### `Auth::logout(): void`
+Clear the auth cookie.
+```php
+Auth::logout();
+return redirect('/login');
+```
+
+### `Auth::user(): mixed`
+Return the currently authenticated user (a `User` model), or `false` when there is no valid token.
+```php
+$user = Auth::user();
+if (! $user) {
+    return redirect('/login');
+}
+echo $user->email;
+```
+
+The global `auth()` helper is a shortcut for `Auth::user()`.
+
+### `Auth::id(): mixed`
+Convenience accessor for the JWT `sub` claim (typically the user id).
+```php
+$userId = Auth::id();
+```
+
+### `Auth::COOKIE` (constant)
+The cookie name (`auth_token`). Override only if you ship a custom auth flow.
+
+### `Auth::DEFAULT_TTL` (constant)
+Default token lifetime (604800 seconds = 7 days). Use `config/auth.php` to change at runtime.
+
+---
+
+## JWT codec
+
+```php
+use Zero\Lib\Auth\Jwt;
+```
+
+### `Jwt::encode(array $payload, int $ttl = 3600): string`
+Sign a payload (HS256 by default; key derived from `APP_KEY`).
+```php
+$token = Jwt::encode(['sub' => $user->id, 'role' => 'admin'], ttl: 600);
+```
+
+### `Jwt::decode(?string $token): ?array`
+Verify and decode. Returns `null` on signature mismatch or expiration.
+```php
+$claims = Jwt::decode($token);
+if ($claims === null) {
+    abort(401);
+}
+```
+
+---
+
+## Scaffold overview
 
 | Feature | Route | Controller |
 | --- | --- | --- |

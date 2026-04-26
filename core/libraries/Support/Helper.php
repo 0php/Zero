@@ -504,6 +504,19 @@ if (!function_exists('str')) {
     }
 }
 
+if (!function_exists('dispatch')) {
+    /**
+     * Dispatch a job onto the default queue. Returns a fluent PendingDispatch
+     * so callers can chain ->onQueue(), ->onConnection(), or ->delay().
+     * The dispatch is flushed when the PendingDispatch goes out of scope, so
+     * `dispatch(new MyJob(...));` works without a terminator.
+     */
+    function dispatch(\Zero\Lib\Queue\Job $job): \Zero\Lib\Queue\PendingDispatch
+    {
+        return new \Zero\Lib\Queue\PendingDispatch($job);
+    }
+}
+
 if (!function_exists('bootApplicationHelpers')) {
     /**
      * Boot all application helper classes once per request/CLI execution.

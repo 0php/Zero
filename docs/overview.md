@@ -13,6 +13,7 @@ Zero is a lightweight, native-PHP micro-framework inspired by Laravel's develope
 - **Migrations** — `Zero\Lib\DB\Schema` + `Blueprint` for structural changes. → [migrations.md](migrations.md)
 - **Authentication** — `Zero\Lib\Auth\Auth` issues JWT cookies and integrates with the bundled login/register/reset scaffold. → [auth.md](auth.md)
 - **Mailing** — `Zero\Lib\Mail\Mailer` wraps SMTP delivery with fluent `Message` composition. → [mail.md](mail.md)
+- **Queue** — `Zero\Lib\Queue\Queue` + `dispatch()` push background jobs through `sync` or `database` drivers; worker via `php zero queue:work`. → [queue.md](queue.md)
 - **HTTP & SOAP clients** — `Zero\Lib\Http` for outbound REST + `Http::soap()` for SOAP. → [support/http.md](support/http.md), [support/soap.md](support/soap.md)
 - **Storage** — `Zero\Lib\Storage\Storage` for file IO across disks (local + S3). → [storage.md](storage.md)
 - **i18n** — `Zero\Lib\I18n\Translator` for locale resolution, fallback chains, and YAML/JSON loaders. → [i18n.md](i18n.md)

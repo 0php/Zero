@@ -21,9 +21,10 @@ chmod +x zero
 | Group | Commands |
 | --- | --- |
 | Server | [`serve`](#serve-the-application) |
-| Generators | [`make:controller`](#generate-a-controller), [`make:service`](#generate-a-service), [`make:model`](#generate-a-model), [`make:middleware`](#generate-a-middleware), [`make:helper`](#generate-a-helper), [`make:logger`](#generate-a-logger), [`make:command`](#generate-a-console-command), [`make:migration`](#generate-a-migration), [`make:seeder`](#generate-a-seeder) |
+| Generators | [`make:controller`](#generate-a-controller), [`make:service`](#generate-a-service), [`make:model`](#generate-a-model), [`make:middleware`](#generate-a-middleware), [`make:helper`](#generate-a-helper), [`make:logger`](#generate-a-logger), [`make:command`](#generate-a-console-command), [`make:migration`](#generate-a-migration), [`make:seeder`](#generate-a-seeder), `make:job` |
 | Database | [`migrate`](#run-migrations), [`migrate:rollback`](#rollback-migrations), [`migrate:refresh`](#refresh-migrations), [`migrate:fresh`](#fresh-migrations), [`db:seed`](#run-a-seeder), [`db:dump`](#dump-the-database), [`db:restore`](#restore-the-database) |
-| App | [`key:generate`](#generate-app-key), [`route:list`](#inspect-registered-routes), [`storage:link`](#link-storage), [`log:clear`](#clear-log-files), [`schedule:run`](#run-scheduled-tasks) |
+| App | [`key:generate`](#generate-app-key), [`route:list`](#inspect-registered-routes), [`storage:link`](#link-storage), [`log:clear`](#clear-log-files), [`schedule:run`](#run-scheduled-tasks), [`schedule:list`](#list-scheduled-tasks) |
+| Queue | `queue:work`, `queue:retry`, `queue:forget`, `queue:flush`, `queue:table` — see [queue.md](queue.md) |
 
 ---
 

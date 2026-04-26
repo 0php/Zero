@@ -36,6 +36,7 @@ Zero Framework is a native-PHP micro-framework that mirrors the developer ergono
 - Fluent DBML (Database Management Layer) query builder, active-record models, migrations, and seeders driven by a concise DBAL.
 - Battery-included CLI (`zero`) for serving, scaffolding, and database management.
 - SMTP mailer with fluent message composition and secure TLS defaults.
+- Background queue (`sync` and `database` drivers) with retry, failed-jobs table, and a long-running worker.
 - Centralised error handler with configurable HTML/JSON output and configurable log channels (file or database).
 - Simple `.env` loader with support for multiple environments and interpolation.
 
@@ -210,6 +211,7 @@ For a production-ready setup (Nginx + PHP-FPM, environment variables, logging, m
 - [View Layer](docs/view.md)
 - [Authentication](docs/auth.md)
 - [Mailer](docs/mail.md)
+- [Queue](docs/queue.md)
 - [CLI Tooling](docs/cli.md)
 - [Storage](docs/storage.md)
 

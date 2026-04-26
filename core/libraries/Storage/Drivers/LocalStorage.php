@@ -162,6 +162,341 @@ final class LocalStorage
         return Response::file($absolute, $headers, $name, $disposition);
     }
 
+    /**
+     * Delete one or more files. Returns true when every target was removed
+     * (missing files count as success — desired state is "gone").
+     *
+     * @param string|array<int, string> $paths
+     */
+    public function delete(string|array $paths): bool
+    {
+        $paths = is_array($paths) ? $paths : [$paths];
+        $ok = true;
+
+        foreach ($paths as $path) {
+            $full = $this->fullPath($path);
+
+            if (! file_exists($full)) {
+                continue;
+            }
+
+            if (! is_file($full) || ! @unlink($full)) {
+                $ok = false;
+            }
+        }
+
+        return $ok;
+    }
+
+    /**
+     * Recursively remove a directory and everything under it.
+     */
+    public function deleteDirectory(string $directory): bool
+    {
+        $full = $this->fullPath($directory);
+
+        if (! is_dir($full)) {
+            return true;
+        }
+
+        return $this->removeTree($full);
+    }
+
+    /**
+     * Copy a file within the disk. Returns false when the source is missing.
+     */
+    public function copy(string $from, string $to): bool
+    {
+        $source = $this->fullPath($from);
+        $target = $this->fullPath($to);
+
+        if (! is_file($source)) {
+            return false;
+        }
+
+        $this->ensureDirectory(dirname($target));
+
+        return @copy($source, $target);
+    }
+
+    /**
+     * Move (rename) a file within the disk.
+     */
+    public function move(string $from, string $to): bool
+    {
+        $source = $this->fullPath($from);
+        $target = $this->fullPath($to);
+
+        if (! is_file($source)) {
+            return false;
+        }
+
+        $this->ensureDirectory(dirname($target));
+
+        return @rename($source, $target);
+    }
+
+    /**
+     * Prepend $data to the file. Creates the file when it does not exist.
+     */
+    public function prepend(string $path, string $data): string
+    {
+        $existing = $this->exists($path) ? $this->get($path) : '';
+
+        return $this->put($path, $data . $existing);
+    }
+
+    /**
+     * Append $data to the file. Creates the file when it does not exist.
+     */
+    public function append(string $path, string $data): string
+    {
+        $full = $this->fullPath($path);
+        $this->ensureDirectory(dirname($full));
+
+        if (file_put_contents($full, $data, FILE_APPEND) === false) {
+            throw new RuntimeException(sprintf('Unable to append to file at [%s].', $full));
+        }
+
+        return $this->relativePath($full);
+    }
+
+    /**
+     * List immediate or recursive sub-directories.
+     *
+     * @return array<int, string>
+     */
+    public function directories(string $directory = '', bool $recursive = false): array
+    {
+        $root = $this->fullPath($directory);
+
+        if (! is_dir($root)) {
+            return [];
+        }
+
+        $results = $recursive
+            ? $this->collectRecursiveDirectoryPaths($root, trim($directory, '/'))
+            : $this->listShallowDirectoryPaths($root);
+
+        sort($results);
+
+        return $results;
+    }
+
+    /**
+     * Create a directory (recursively if needed).
+     */
+    public function makeDirectory(string $path): bool
+    {
+        $full = $this->fullPath($path);
+
+        if (is_dir($full)) {
+            return true;
+        }
+
+        return @mkdir($full, 0775, true);
+    }
+
+    public function size(string $path): int
+    {
+        $full = $this->fullPath($path);
+
+        if (! is_file($full)) {
+            throw new RuntimeException(sprintf('File [%s] does not exist.', $full));
+        }
+
+        $size = filesize($full);
+
+        return $size === false ? 0 : (int) $size;
+    }
+
+    public function lastModified(string $path): int
+    {
+        $full = $this->fullPath($path);
+
+        if (! is_file($full)) {
+            throw new RuntimeException(sprintf('File [%s] does not exist.', $full));
+        }
+
+        $mtime = filemtime($full);
+
+        return $mtime === false ? 0 : (int) $mtime;
+    }
+
+    public function mimeType(string $path): string
+    {
+        $full = $this->fullPath($path);
+
+        if (! is_file($full)) {
+            throw new RuntimeException(sprintf('File [%s] does not exist.', $full));
+        }
+
+        if (function_exists('mime_content_type')) {
+            $type = @mime_content_type($full);
+
+            if (is_string($type) && $type !== '') {
+                return $type;
+            }
+        }
+
+        return 'application/octet-stream';
+    }
+
+    /**
+     * Open the file for reading. Caller must fclose() the returned resource.
+     *
+     * @return resource
+     */
+    public function readStream(string $path)
+    {
+        $full = $this->fullPath($path);
+
+        if (! is_file($full)) {
+            throw new RuntimeException(sprintf('File [%s] does not exist.', $full));
+        }
+
+        $handle = @fopen($full, 'rb');
+
+        if ($handle === false) {
+            throw new RuntimeException(sprintf('Unable to open file at [%s] for reading.', $full));
+        }
+
+        return $handle;
+    }
+
+    /**
+     * Pipe a readable stream into the disk. Does not close the supplied stream.
+     *
+     * @param resource $stream
+     */
+    public function writeStream(string $path, $stream): string
+    {
+        if (! is_resource($stream)) {
+            throw new InvalidArgumentException('writeStream() expects a stream resource.');
+        }
+
+        $full = $this->fullPath($path);
+        $this->ensureDirectory(dirname($full));
+
+        $target = @fopen($full, 'wb');
+
+        if ($target === false) {
+            throw new RuntimeException(sprintf('Unable to open file at [%s] for writing.', $full));
+        }
+
+        if (stream_copy_to_stream($stream, $target) === false) {
+            fclose($target);
+            throw new RuntimeException(sprintf('Unable to write stream to [%s].', $full));
+        }
+
+        fclose($target);
+
+        return $this->relativePath($full);
+    }
+
+    /**
+     * Apply POSIX permissions appropriate for "public" or "private" visibility.
+     */
+    public function setVisibility(string $path, string $visibility): bool
+    {
+        $full = $this->fullPath($path);
+
+        if (! file_exists($full)) {
+            return false;
+        }
+
+        $mode = $this->visibilityMode($visibility, is_dir($full));
+
+        return @chmod($full, $mode);
+    }
+
+    /**
+     * Inverse of setVisibility(). Returns 'public' or 'private'.
+     */
+    public function getVisibility(string $path): string
+    {
+        $full = $this->fullPath($path);
+
+        if (! file_exists($full)) {
+            throw new RuntimeException(sprintf('Path [%s] does not exist.', $full));
+        }
+
+        $perms = @fileperms($full);
+
+        if ($perms === false) {
+            return 'private';
+        }
+
+        // Other-readable bit (0004) controls "world-can-read", which we treat
+        // as "public" in the storage abstraction.
+        return ($perms & 0004) === 0004 ? 'public' : 'private';
+    }
+
+    private function visibilityMode(string $visibility, bool $isDir): int
+    {
+        return match ($visibility) {
+            'public' => $isDir ? 0775 : 0664,
+            'private' => $isDir ? 0700 : 0600,
+            default => throw new InvalidArgumentException(sprintf('Unsupported visibility [%s]. Use public or private.', $visibility)),
+        };
+    }
+
+    private function removeTree(string $directory): bool
+    {
+        $iterator = new FilesystemIterator($directory, FilesystemIterator::SKIP_DOTS);
+        $ok = true;
+
+        foreach ($iterator as $item) {
+            if ($item->isDir() && ! $item->isLink()) {
+                $ok = $this->removeTree($item->getPathname()) && $ok;
+            } else {
+                $ok = @unlink($item->getPathname()) && $ok;
+            }
+        }
+
+        return @rmdir($directory) && $ok;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function listShallowDirectoryPaths(string $root): array
+    {
+        $dirs = [];
+        $iterator = new FilesystemIterator($root, FilesystemIterator::SKIP_DOTS);
+
+        foreach ($iterator as $item) {
+            if (! $item->isDir()) {
+                continue;
+            }
+
+            $dirs[] = $this->relativePath($item->getPathname());
+        }
+
+        return $dirs;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function collectRecursiveDirectoryPaths(string $root, string $prefix): array
+    {
+        $dirs = [];
+        $iterator = new FilesystemIterator($root, FilesystemIterator::SKIP_DOTS);
+
+        foreach ($iterator as $item) {
+            if (! $item->isDir()) {
+                continue;
+            }
+
+            $relativePath = ltrim(($prefix === '' ? '' : $prefix . '/') . $item->getBasename(), '/');
+            $dirs[] = $relativePath;
+            $dirs = array_merge($dirs, $this->collectRecursiveDirectoryPaths($item->getPathname(), $relativePath));
+        }
+
+        return $dirs;
+    }
+
     private function normalizeExpiration(DateTimeInterface|int $expiration): int
     {
         if ($expiration instanceof DateTimeInterface) {

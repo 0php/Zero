@@ -6,6 +6,7 @@ Zero is a lightweight, native-PHP micro-framework inspired by Laravel's develope
 
 - **Entry point** — [`public/index.php`](../public/index.php) bootstraps configuration, sessions, helpers, then delegates to the router.
 - **Routing** — `Zero\Lib\Router` maps URIs to controller actions, runs middleware, and resolves controller dependencies. → [router.md](router.md)
+- **Controllers** — Plain `App\Controllers\*` classes whose public methods receive the `Request` and return any value the framework can render. → [controllers.md](controllers.md)
 - **Request / Response** — `Zero\Lib\Http\Request` captures query/body/JSON/files; `Zero\Lib\Http\Response` builds replies; controllers can return any scalar/array/model/`Response`. → [request-response.md](request-response.md)
 - **Views** — `Zero\Lib\View` renders PHP templates with Blade-inspired directives, layouts, sections, and optional caching. → [view.md](view.md)
 - **Database (DBML)** — `Zero\Lib\DB\DBML` is the fluent query builder on top of the PDO bridge. → [dbml.md](dbml.md)
@@ -30,6 +31,7 @@ docs/
 ├── overview.md              ← you are here
 ├── request-response.md      ← Request/Response API
 ├── router.md                ← routing, groups, middleware, named routes
+├── controllers.md           ← controller anatomy, request/response, validation, REST
 ├── view.md                  ← templates, directives, layouts
 ├── models.md                ← active-record + relations + ModelQuery
 ├── dbml.md                  ← fluent query builder

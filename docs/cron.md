@@ -212,6 +212,64 @@ $schedule->command('b')->hourly()->withoutOverlapping()->mutexName('reports');
 $schedule->command('a')->daily()->description('Nightly clean-up');
 ```
 
+### Conditional helpers
+
+Stack arbitrary predicates on top of cadence/filter rules. Predicates receive the current `DateTimeInterface`.
+
+#### `when(callable $predicate): Event`
+Run only when the predicate returns truthy.
+```php
+$schedule->command('reports:sync')
+    ->hourly()
+    ->when(fn () => env('APP_ENV') === 'production');
+```
+
+#### `skip(callable $predicate): Event`
+Skip the run when the predicate returns truthy.
+```php
+$schedule->command('emails:dispatch')
+    ->everyFiveMinutes()
+    ->skip(fn () => env('DISABLE_EMAILS') === 'true');
+```
+
+### Lifecycle hooks
+
+Attach side effects without changing the task itself. Hooks run after the cadence/`when`/`skip` checks pass. Each hook receives the `Event` instance. Hook exceptions are logged but never break the scheduler.
+
+#### `before(callable $callback): Event`
+Runs immediately before `execute()`.
+```php
+$schedule->command('reports:sync')
+    ->hourly()
+    ->before(fn ($event) => logger('starting ' . $event->getDescription()));
+```
+
+#### `after(callable $callback): Event`
+Always runs after `execute()`, success or failure.
+```php
+$schedule->command('reports:sync')
+    ->hourly()
+    ->after(fn ($event) => logger('finished ' . $event->getDescription()));
+```
+
+#### `onSuccess(callable $callback): Event`
+Runs only when the task completes successfully (no throw, exit code 0 or void).
+```php
+$schedule->command('billing:invoice')
+    ->dailyAt('00:30')
+    ->onSuccess(fn () => Http::get('https://hc-ping.com/abc-123'));
+```
+
+#### `onFailure(callable $callback): Event`
+Runs only when the task throws or returns a non-zero exit code.
+```php
+$schedule->command('billing:invoice')
+    ->dailyAt('00:30')
+    ->onFailure(fn ($event) => logger('billing failed: ' . $event->lastException()?->getMessage()));
+```
+
+> **Exit codes.** `command()` events now propagate the exit code returned by the underlying console command. A non-zero exit triggers `onFailure` and is reported as a failure in `schedule:run`. Closures attached via `call()` continue to be treated as successful unless they throw.
+
 ### Raw cron expressions
 
 #### `cron(string $expression): Event`
@@ -286,17 +344,44 @@ Press Ctrl+C when you are done. Adjust the `sleep` duration or inline additional
 
 Container platforms (Kubernetes CronJob, ECS Scheduled Task, etc.) should invoke the same command on their own scheduler.
 
+## Listing the schedule
+
+Inspect which tasks are registered (and which are due right now) without executing them:
+
+```bash
+php zero schedule:list
+php zero schedule:list --path=routes/cron.php
+```
+
+The `Due now` column reflects every active rule — cadence helpers, `daysOfWeek`/`hours`/`minutes` filters, and any `when()`/`skip()` predicates. Useful for verifying that a new schedule will fire when you expect.
+
+## Draining the queue from cron
+
+Hosts without supervisord can drain the queue by scheduling `queue:work --once`:
+
+```php
+$schedule->command('queue:work', ['--once', '--queue=default'])
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->description('Drain default queue');
+```
+
+See [queue.md](queue.md) for the full queue reference.
+
 ## Operating & Monitoring
 
 - Manual runs: `php zero schedule:run` is safe when testing new tasks—the output is routed through the internal log channel.
+- Listing: `php zero schedule:list` prints every registered task and whether it would fire at the current minute.
 - Logging: each run emits “running/completed/failed” log events; redirect cron stdout/stderr to an aggregated log file or service.
-- Health checks: append a heartbeat (DB row, log ping, uptime monitor) at the end of `schedule:run` to detect missed invocations.
-- Failure handling: the command exits with a non-zero status if any task throws; configure alerts on cron failures or log errors.
+- Health checks: append a heartbeat (DB row, log ping, uptime monitor) at the end of `schedule:run` to detect missed invocations. Or use `onSuccess(fn () => Http::get($pingUrl))` per-task for fine-grained healthcheck.io / cronitor pings.
+- Failure handling: the command exits with a non-zero status if any task throws or a scheduled `command()` returns a non-zero exit code. Use `onFailure()` to wire alerts.
 
 ## Roadmap Ideas
 
 - Introduce per-task timezone overrides (e.g. `$event->timezone('UTC')`).
-- Surface lifecycle hooks (`before`/`after` callbacks, success/failure listeners).
+- Background execution (`runInBackground()`) so a slow task does not block subsequent ones.
+- Per-task output capture (`sendOutputTo($file)` / `appendOutputTo($file)`).
+- Built-in healthcheck-ping helpers (`pingBefore($url)` / `thenPing($url)`).
 - Support alternative mutex stores beyond the file-based lock.
 - Document best practices for multi-environment schedules and feature toggles.
 

@@ -261,6 +261,7 @@ final class Message
     {
         $lines = [];
         $lines[] = 'Date: ' . $this->formatDate();
+        $lines[] = 'Message-ID: ' . $this->generateMessageId();
 
         if ($this->subject !== '') {
             $lines[] = 'Subject: ' . $this->encodeHeader($this->subject);
@@ -383,6 +384,13 @@ final class Message
         }
 
         return $value;
+    }
+
+    private function generateMessageId(): string
+    {
+        $domain = env('MAIL_HELO_DOMAIN', 'localhost') ?: 'localhost';
+
+        return sprintf('<%s.%s@%s>', bin2hex(random_bytes(8)), time(), $domain);
     }
 
     private function formatDate(): string

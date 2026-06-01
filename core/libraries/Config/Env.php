@@ -39,6 +39,15 @@ function loadEnvFiles(): array
                 $key = trim($key);
                 $value = trim($value);
 
+                // Strip a single pair of surrounding quotes and unescape inner quotes
+                if (strlen($value) >= 2) {
+                    $first = $value[0];
+                    if (($first === '"' || $first === "'") && substr($value, -1) === $first) {
+                        $value = substr($value, 1, -1);
+                        $value = str_replace(['\\' . $first, '\\\\'], [$first, '\\'], $value);
+                    }
+                }
+
                 // Parse array values enclosed in square brackets [item1,item2]
                 if (preg_match('/^\[(.*)]$/', $value, $matches)) {
                     $items = array_map('trim', explode(',', $matches[1]));

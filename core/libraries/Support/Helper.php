@@ -398,7 +398,14 @@ if (!function_exists('url')) {
      */
     function url(string $path = '', array $query = []): string
     {
-        $scheme = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        // Detect HTTPS, including when behind a reverse proxy (nginx) that
+        // terminates SSL and forwards the original scheme via X-Forwarded-Proto.
+        $forwarded = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+        $secure = (! empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+            || $forwarded === 'https'
+            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on'
+            || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
+        $scheme = $secure ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'] ?? ($_ENV['APP_HOST'] ?? 'localhost');
         $base = $scheme . '://' . $host;
 
@@ -419,7 +426,9 @@ if (!function_exists('asset')) {
      */
     function asset(string $path): string
     {
-        return url($path);
+        // Root-relative so assets always load over the page's own scheme/host
+        // (avoids mixed-content blocking when the site is served via HTTPS proxy).
+        return '/' . ltrim($path, '/');
     }
 }
 

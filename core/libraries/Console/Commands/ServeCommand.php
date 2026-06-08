@@ -28,15 +28,25 @@ final class ServeCommand implements CommandInterface
 
     public function execute(array $argv): int
     {
-        $options = getopt('', [
-            'host:',
-            'port:',
-            'root:',
-            'franken',
-            'swolee',
-            'watch',
-        ]);
-        $options = $options === false ? [] : $options;
+        // Parse "--key=value" options and "--flag" switches directly from argv.
+        // (getopt() can't be used here: it stops at the first non-option operand,
+        //  i.e. the "serve" sub-command, so any --host/--port after it are ignored.)
+        $options = [];
+        foreach ($argv as $arg) {
+            if (! is_string($arg) || ! str_starts_with($arg, '--')) {
+                continue;
+            }
+            $body = substr($arg, 2);
+            if ($body === '') {
+                continue;
+            }
+            if (str_contains($body, '=')) {
+                [$key, $value] = explode('=', $body, 2);
+                $options[$key] = $value;
+            } else {
+                $options[$body] = true;
+            }
+        }
 
         $host = $options['host'] ?? env('HOST', Application::DEFAULT_HOST);
         $port = $options['port'] ?? env('PORT', Application::DEFAULT_PORT);

@@ -11,19 +11,35 @@ class View
     private static ?string $currentSection = null;
     private static ?string $layout = null;
     private static array $layoutData = [];
-    private static array $config = [
-        'cache_enabled' => false,
-        'cache_path' => '/storage/cache/views',
-        'cache_lifetime' => 3600,
-        'debug' => false,
-    ];
+    private static array $shared = [];
+    private static array $directives = [];
+    private static array $composers = [];
+    private static array $config = [];
 
     /**
      * Configure the view system.
      */
     public static function configure(array $config = []): void
     {
-        self::$config = array_merge(self::$config, $config);
+        self::$config = array_merge(self::getConfig(), $config);
+    }
+
+    /**
+     * Return resolved config, reading env variables on first call.
+     * Supported .env keys: VIEW_CACHE (true/false), VIEW_CACHE_PATH,
+     * VIEW_CACHE_LIFETIME (seconds), VIEW_DEBUG (true/false).
+     */
+    private static function getConfig(): array
+    {
+        if (self::$config === []) {
+            self::$config = [
+                'cache_enabled'  => filter_var(env('VIEW_CACHE', false), FILTER_VALIDATE_BOOLEAN),
+                'cache_path'     => env('VIEW_CACHE_PATH', base('storage/framework')),
+                'cache_lifetime' => (int) env('VIEW_CACHE_LIFETIME', 86400),
+                'debug'          => filter_var(env('VIEW_DEBUG', false), FILTER_VALIDATE_BOOLEAN),
+            ];
+        }
+        return self::$config;
     }
 
     /**
@@ -48,6 +64,8 @@ class View
 
         try {
             $compiledView = self::compileTemplate($viewPath, $viewFile);
+
+            self::runComposers($viewPath);
 
             extract($data, EXTR_SKIP);
 
@@ -160,6 +178,94 @@ class View
     }
 
     /**
+     * Share a value with every template in the current render. The view
+     * executes before the layout, so a page can `share()` at the top and the
+     * layout/head will see the value when it renders.
+     *
+     * Cleared between renders by resetState().
+     */
+    public static function share(string $key, mixed $value): void
+    {
+        self::$shared[$key] = $value;
+    }
+
+    /**
+     * Read a shared value (or default).
+     */
+    public static function shared(string $key, mixed $default = null): mixed
+    {
+        return self::$shared[$key] ?? $default;
+    }
+
+    /**
+     * Append a value to a shared array bucket. Useful when several pieces of
+     * code want to contribute to the same hook (e.g. extra <link> tags,
+     * preload hints, body classes).
+     */
+    public static function push(string $key, mixed $value): void
+    {
+        if (!isset(self::$shared[$key]) || !is_array(self::$shared[$key])) {
+            self::$shared[$key] = [];
+        }
+        self::$shared[$key][] = $value;
+    }
+
+    /**
+     * Register a custom Blade-style directive. The callback receives the raw
+     * PHP-like argument string (everything between the parentheses) and must
+     * return the compiled PHP snippet to inline. Example:
+     *
+     *   View::directive('jsonld', fn($args) => "<?php View::share('jsonld', {$args}); ?>");
+     *
+     * The compiler picks these up automatically.
+     */
+    public static function directive(string $name, callable $compile): void
+    {
+        self::$directives[$name] = $compile;
+    }
+
+    /**
+     * @return array<string, callable>
+     */
+    public static function directives(): array
+    {
+        return self::$directives;
+    }
+
+    /**
+     * Register a view composer — a callback fired right before a view (or
+     * group of views) is rendered. Useful for injecting shared state without
+     * touching every page. Pass `*` to match all views.
+     *
+     *   View::composer('pages.home.*', fn() => View::share('og_image', '...'));
+     */
+    public static function composer(string $pattern, callable $callback): void
+    {
+        self::$composers[] = ['pattern' => $pattern, 'callback' => $callback];
+    }
+
+    /**
+     * Internal: run any composers matching the given view path.
+     */
+    public static function runComposers(string $viewPath): void
+    {
+        foreach (self::$composers as $composer) {
+            if (self::matchPattern($composer['pattern'], $viewPath)) {
+                ($composer['callback'])($viewPath);
+            }
+        }
+    }
+
+    private static function matchPattern(string $pattern, string $viewPath): bool
+    {
+        if ($pattern === '*' || $pattern === $viewPath) {
+            return true;
+        }
+        $regex = '#^' . str_replace(['\*', '\.\*'], ['.*', '.*'], preg_quote($pattern, '#')) . '$#';
+        return (bool) preg_match($regex, $viewPath);
+    }
+
+    /**
      * Include a partial view immediately.
      */
     public static function include(string $view, array $data = []): void
@@ -186,11 +292,11 @@ class View
      */
     public static function clearCache(): void
     {
-        if (!self::$config['cache_enabled'] || !self::$config['cache_path']) {
+        if (!self::getConfig()['cache_enabled'] || !self::getConfig()['cache_path']) {
             return;
         }
 
-        $cacheDir = rtrim(self::$config['cache_path'], '/') . '/views/cache';
+        $cacheDir = rtrim(self::getConfig()['cache_path'], '/') . '/views/cache';
         if (is_dir($cacheDir)) {
             foreach (glob($cacheDir . '/*') as $file) {
                 if (is_file($file)) {
@@ -205,14 +311,14 @@ class View
      */
     public static function clearViewCache(string $view): void
     {
-        if (!self::$config['cache_enabled'] || !self::$config['cache_path']) {
+        if (!self::getConfig()['cache_enabled'] || !self::getConfig()['cache_path']) {
             return;
         }
 
         $cacheFile = self::getCacheFilePath(self::normalizeViewName($view));
         if (file_exists($cacheFile)) {
             unlink($cacheFile);
-            if (self::$config['debug']) {
+            if (self::getConfig()['debug']) {
                 self::log("Cleared cache for view: {$view}");
             }
         }
@@ -223,13 +329,13 @@ class View
      */
     private static function log(string $message): void
     {
-        if (!self::$config['debug']) {
+        if (!self::getConfig()['debug']) {
             return;
         }
 
         $timestamp = date('Y-m-d H:i:s');
         $logMessage = "[{$timestamp}] {$message}\n";
-        $logFile = rtrim(self::$config['cache_path'], '/') . '/views/cache/view.log';
+        $logFile = rtrim(self::getConfig()['cache_path'], '/') . '/views/cache/view.log';
         file_put_contents($logFile, $logMessage, FILE_APPEND);
     }
 
@@ -238,7 +344,7 @@ class View
      */
     private static function compileTemplate(string $identifier, string $path): string
     {
-        $useCache = self::$config['cache_enabled'];
+        $useCache = self::getConfig()['cache_enabled'];
         $cacheFile = null;
 
         if ($useCache) {
@@ -249,7 +355,7 @@ class View
             }
 
             if (self::isCacheValid($cacheFile, $path)) {
-                if (self::$config['debug']) {
+                if (self::getConfig()['debug']) {
                     self::log("Using cached version of view: {$identifier}");
                 }
 
@@ -273,7 +379,7 @@ class View
         if ($useCache && $cacheFile !== null) {
             file_put_contents($cacheFile, $compiled);
 
-            if (self::$config['debug']) {
+            if (self::getConfig()['debug']) {
                 self::log("Cached new version of view: {$identifier}");
             }
         }
@@ -286,7 +392,7 @@ class View
      */
     private static function compileTemplateString(string $content): string
     {
-        $useCache = self::$config['cache_enabled'];
+        $useCache = self::getConfig()['cache_enabled'];
         $cacheFile = null;
         $identifier = 'string:' . md5($content);
 
@@ -298,7 +404,7 @@ class View
             }
 
             if (self::isStringCacheValid($cacheFile)) {
-                if (self::$config['debug']) {
+                if (self::getConfig()['debug']) {
                     self::log("Using cached version of view: {$identifier}");
                 }
 
@@ -317,7 +423,7 @@ class View
         if ($useCache && $cacheFile !== null) {
             file_put_contents($cacheFile, $compiled);
 
-            if (self::$config['debug']) {
+            if (self::getConfig()['debug']) {
                 self::log("Cached new version of view: {$identifier}");
             }
         }
@@ -332,7 +438,7 @@ class View
     {
         $hash = md5($view);
 
-        return rtrim(self::$config['cache_path'], '/') . "/views/cache/{$hash}.php";
+        return rtrim(self::getConfig()['cache_path'], '/') . "/views/cache/{$hash}.php";
     }
 
     /**
@@ -344,7 +450,8 @@ class View
             return false;
         }
 
-        if (time() - filemtime($cachePath) > self::$config['cache_lifetime']) {
+        $lifetime = self::getConfig()['cache_lifetime'];
+        if ($lifetime > 0 && time() - filemtime($cachePath) > $lifetime) {
             return false;
         }
 
@@ -360,7 +467,8 @@ class View
             return false;
         }
 
-        return time() - filemtime($cachePath) <= self::$config['cache_lifetime'];
+        $lifetime = self::getConfig()['cache_lifetime'];
+        return $lifetime === 0 || time() - filemtime($cachePath) <= $lifetime;
     }
 
     /**
@@ -387,5 +495,7 @@ class View
         self::$currentSection = null;
         self::$layout = null;
         self::$layoutData = [];
+        self::$shared = [];
+        // NOTE: directives & composers persist across renders by design.
     }
 }

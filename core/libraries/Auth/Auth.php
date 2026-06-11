@@ -56,12 +56,16 @@ class Auth
 
     /**
      * Convenience accessor for the subject identifier.
+     *
+     * Reads the subject straight from the verified token payload rather than
+     * from the User model (which has no `sub` key), so it returns the
+     * authenticated user's id, or null when there is no valid token.
      */
     public static function id(): mixed
     {
-        $user = self::user();
+        $payload = Jwt::decode($_COOKIE[self::COOKIE] ?? null);
 
-        return $user['sub'] ?? null;
+        return $payload['sub'] ?? null;
     }
 
     protected static function queueCookie(string $value, int $ttl): void

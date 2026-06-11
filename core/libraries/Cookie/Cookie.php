@@ -50,7 +50,15 @@ class Cookie
             return null;
         }
 
-        return Crypto::decrypt($_COOKIE[$name]);
+        // A cookie encrypted with a different APP_KEY (or a tampered/corrupt
+        // value) makes openssl_decrypt fail and Crypto::decrypt throw. Treat
+        // that as a missing cookie so a single stale cookie can't fatal every
+        // request — the caller will re-resolve and re-set it.
+        try {
+            return Crypto::decrypt($_COOKIE[$name]);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**

@@ -36,6 +36,11 @@ class Model implements JsonSerializable
     protected ?string $table = null;
 
     /**
+     * Database connection name (key under `config/database.php`). Null = default.
+     */
+    protected ?string $connection = null;
+
+    /**
      * Name of the primary key column.
      */
     protected string $primaryKey = 'id';

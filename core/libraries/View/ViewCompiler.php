@@ -150,6 +150,11 @@ final class ViewCompiler
             );
         }
 
+        // Apply custom directives registered via View::directive().
+        foreach (\Zero\Lib\View::directives() as $name => $compile) {
+            $content = self::replaceDirectiveWithArguments($content, $name, $compile);
+        }
+
         if ($options['enable_sections']) {
             $content = self::replaceDirectiveWithArguments(
                 $content,

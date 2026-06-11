@@ -19,6 +19,7 @@ use Zero\Lib\Console\Commands\MakeSeederCommand;
 use Zero\Lib\Console\Commands\MakeServiceCommand;
 use Zero\Lib\Console\Commands\MigrateCommand;
 use Zero\Lib\Console\Commands\MigrateFreshCommand;
+use Zero\Lib\Console\Commands\MigrateMarkCommand;
 use Zero\Lib\Console\Commands\MigrateRefreshCommand;
 use Zero\Lib\Console\Commands\RollbackCommand;
 use Zero\Lib\Console\Commands\SeedCommand;
@@ -33,6 +34,7 @@ use Zero\Lib\Console\Commands\QueueTableCommand;
 use Zero\Lib\Console\Commands\QueueWorkCommand;
 use Zero\Lib\Console\Commands\ScheduleListCommand;
 use Zero\Lib\Console\Commands\ScheduleRunCommand;
+use Zero\Lib\Console\Commands\CacheClearCommand;
 use Zero\Lib\Console\Commands\LogClearCommand;
 use Zero\Lib\Console\Commands\DatabaseDumpCommand;
 use Zero\Lib\Console\Commands\DatabaseRestoreCommand;
@@ -58,6 +60,7 @@ final class Application
         $this->addCommand(new MakeMigrationCommand());
         $this->addCommand(new MigrateCommand());
         $this->addCommand(new MigrateFreshCommand());
+        $this->addCommand(new MigrateMarkCommand());
         $this->addCommand(new MigrateRefreshCommand());
         $this->addCommand(new RollbackCommand());
         $this->addCommand(new MakeSeederCommand());
@@ -77,6 +80,7 @@ final class Application
         $this->addCommand(new QueueTableCommand());
         $this->addCommand(new MakeJobCommand());
         $this->addCommand(new LogClearCommand());
+        $this->addCommand(new CacheClearCommand());
         $this->addCommand(new DatabaseDumpCommand());
         $this->addCommand(new DatabaseRestoreCommand());
 

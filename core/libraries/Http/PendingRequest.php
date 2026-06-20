@@ -304,7 +304,11 @@ class PendingRequest
         $headerSize = (int) curl_getinfo($handle, CURLINFO_HEADER_SIZE);
         $error = curl_errno($handle) ? curl_error($handle) : null;
 
-        curl_close($handle);
+        // curl_close() is a no-op since PHP 8.0 (the handle is a CurlHandle
+        // object freed by the garbage collector) and is deprecated in PHP 8.5,
+        // where this app's error handler promotes the deprecation to an
+        // exception. Unset the handle instead to release it deterministically.
+        unset($handle);
 
         $rawHeaders = '';
         $body = '';

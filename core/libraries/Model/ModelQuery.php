@@ -6,6 +6,7 @@ namespace Zero\Lib\Model;
 
 use Closure;
 use InvalidArgumentException;
+use Zero\Lib\Database;
 use Zero\Lib\DB\DBML;
 use Zero\Lib\DB\DBMLExpression;
 use Zero\Lib\Model as BaseModel;
@@ -25,6 +26,7 @@ class ModelQuery
     protected string $deletedAtColumn = 'deleted_at';
     protected bool $includeTrashed = false;
     protected bool $onlyTrashed = false;
+    protected ?string $connection = null;
     /** @var array<string, Closure|null> */
     protected array $eagerLoads = [];
     /** @var array<string, string> relation => alias */
@@ -38,6 +40,19 @@ class ModelQuery
         $model = new $this->modelClass();
         $this->usesSoftDeletes = $model->usesSoftDeletes();
         $this->deletedAtColumn = $model->getDeletedAtColumn();
+        $this->connection = $model->getConnectionName();
+    }
+
+    /**
+     * Execute the callback with this query's connection active on the stack.
+     */
+    protected function runOnConnection(callable $callback): mixed
+    {
+        if ($this->connection === null) {
+            return $callback();
+        }
+
+        return Database::withConnection($this->connection, $callback);
     }
 
     public function __clone(): void
@@ -142,7 +157,7 @@ class ModelQuery
      */
     public function get(array|string|DBMLExpression $columns = []): array
     {
-        $records = $this->preparedBuilder()->get($columns);
+        $records = $this->runOnConnection(fn () => $this->preparedBuilder()->get($columns));
         $models = array_map(fn (array $attributes) => $this->newModel($attributes, true), $records);
 
         return $this->hydrateModels($models);
@@ -153,7 +168,7 @@ class ModelQuery
      */
     public function first(array|string|DBMLExpression $columns = []): ?BaseModel
     {
-        $record = $this->preparedBuilder()->first($columns);
+        $record = $this->runOnConnection(fn () => $this->preparedBuilder()->first($columns));
 
         if ($record === null) {
             return null;
@@ -167,7 +182,7 @@ class ModelQuery
      */
     public function updateOrCreate(array $attributes, array $values = []): BaseModel
     {
-        $record = $this->preparedBuilder()->updateOrCreate($attributes, $values);
+        $record = $this->runOnConnection(fn () => $this->preparedBuilder()->updateOrCreate($attributes, $values));
 
         /** @var BaseModel $model */
         $model = $this->hydrateModel($this->newModel($record, true));
@@ -180,7 +195,7 @@ class ModelQuery
      */
     public function findOrCreate(array $attributes, array $values = []): BaseModel
     {
-        $record = $this->preparedBuilder()->findOrCreate($attributes, $values);
+        $record = $this->runOnConnection(fn () => $this->preparedBuilder()->findOrCreate($attributes, $values));
 
         /** @var BaseModel $model */
         $model = $this->hydrateModel($this->newModel($record, true));
@@ -228,7 +243,7 @@ class ModelQuery
      */
     public function count(string $column = '*'): int
     {
-        return $this->preparedBuilder()->count($column);
+        return $this->runOnConnection(fn () => $this->preparedBuilder()->count($column));
     }
 
     /**
@@ -236,7 +251,7 @@ class ModelQuery
      */
     public function paginate(int $perPage = 15, int $page = 1): Paginator
     {
-        $paginator = $this->preparedBuilder()->paginate($perPage, $page);
+        $paginator = $this->runOnConnection(fn () => $this->preparedBuilder()->paginate($perPage, $page));
 
         $items = array_map(fn (array $attributes) => $this->newModel($attributes, true), $paginator->items());
         $items = $this->hydrateModels($items);
@@ -249,7 +264,7 @@ class ModelQuery
      */
     public function simplePaginate(int $perPage = 15, int $page = 1): Paginator
     {
-        $paginator = $this->preparedBuilder()->simplePaginate($perPage, $page);
+        $paginator = $this->runOnConnection(fn () => $this->preparedBuilder()->simplePaginate($perPage, $page));
 
         $items = array_map(fn (array $attributes) => $this->newModel($attributes, true), $paginator->items());
         $items = $this->hydrateModels($items);
@@ -262,7 +277,7 @@ class ModelQuery
      */
     public function exists(): bool
     {
-        return $this->preparedBuilder()->exists();
+        return $this->runOnConnection(fn () => $this->preparedBuilder()->exists());
     }
 
     /**
@@ -270,7 +285,7 @@ class ModelQuery
      */
     public function pluck(string $column, ?string $key = null): array
     {
-        return $this->preparedBuilder()->pluck($column, $key);
+        return $this->runOnConnection(fn () => $this->preparedBuilder()->pluck($column, $key));
     }
 
     /**
@@ -278,7 +293,7 @@ class ModelQuery
      */
     public function value(string $column): mixed
     {
-        return $this->preparedBuilder()->value($column);
+        return $this->runOnConnection(fn () => $this->preparedBuilder()->value($column));
     }
 
     /**
@@ -287,7 +302,7 @@ class ModelQuery
     public function delete(): int
     {
         if (! $this->usesSoftDeletes) {
-            return $this->preparedBuilder()->delete();
+            return $this->runOnConnection(fn () => $this->preparedBuilder()->delete());
         }
 
         $deleted = 0;
@@ -307,7 +322,7 @@ class ModelQuery
     public function forceDelete(): int
     {
         if (! $this->usesSoftDeletes) {
-            return $this->preparedBuilder()->delete();
+            return $this->runOnConnection(fn () => $this->preparedBuilder()->delete());
         }
 
         $deleted = 0;

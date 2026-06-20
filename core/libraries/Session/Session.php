@@ -59,4 +59,15 @@ class Session {
     public static function destroy() {
         session_destroy();
     }
+
+    /**
+     * Regenerate the session ID, preserving session data. Call this on
+     * privilege changes (login/logout) to prevent session fixation.
+     */
+    public static function regenerate(bool $deleteOld = true): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id($deleteOld);
+        }
+    }
 }

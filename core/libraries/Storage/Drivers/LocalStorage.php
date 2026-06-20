@@ -544,8 +544,20 @@ final class LocalStorage
     private function fullPath(string $path): string
     {
         $root = rtrim($this->config['root'] ?? storage_path(), '/');
+        $relative = ltrim($path, '/');
 
-        return $root . '/' . ltrim($path, '/');
+        // Defense in depth against path traversal: reject any attempt to
+        // escape the disk root via ".." or a NUL byte. An empty path is
+        // allowed and resolves to the disk root so directory listings like
+        // files('') keep working.
+        if (
+            str_contains($relative, "\0")
+            || preg_match('#(^|/)\.\.(/|$)#', $relative) === 1
+        ) {
+            throw new \RuntimeException('Invalid storage path.');
+        }
+
+        return $root . '/' . $relative;
     }
 
     private function relativePath(string $fullPath): string

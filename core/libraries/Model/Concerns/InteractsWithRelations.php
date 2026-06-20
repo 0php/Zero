@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zero\Lib\Model\Concerns;
 
 use RuntimeException;
+use Zero\Lib\Database;
 use Zero\Lib\DB\DBML;
 use Zero\Lib\Model as BaseModel;
 use Zero\Lib\Model\ModelQuery;
@@ -177,6 +178,28 @@ trait InteractsWithRelations
     }
 
     /**
+     * Resolve the database connection name for the model.
+     */
+    public function getConnectionName(): ?string
+    {
+        return $this->connection ?? null;
+    }
+
+    /**
+     * Execute the callback with this model's connection active on the stack.
+     */
+    public function runOnConnection(callable $callback): mixed
+    {
+        $name = $this->getConnectionName();
+
+        if ($name === null) {
+            return $callback();
+        }
+
+        return Database::withConnection($name, $callback);
+    }
+
+    /**
      * Resolve the table name, defaulting to a snake_cased plural of the class.
      */
     public function getTable(): string
@@ -213,7 +236,7 @@ trait InteractsWithRelations
         $attributes = $this->attributes;
         $this->applyTimestampsForInsert($attributes);
 
-        $id = $this->newBaseQuery()->insert($attributes);
+        $id = $this->runOnConnection(fn () => $this->newBaseQuery()->insert($attributes));
 
         $this->attributes = array_merge($this->attributes, $attributes);
 
@@ -262,9 +285,9 @@ trait InteractsWithRelations
             throw new RuntimeException('Cannot update a model without a primary key value.');
         }
 
-        $affected = $this->newBaseQuery()
+        $affected = $this->runOnConnection(fn () => $this->newBaseQuery()
             ->where($this->getPrimaryKey(), $key)
-            ->update($dirty);
+            ->update($dirty));
 
         if ($affected) {
             $this->forceFill($dirty);
@@ -298,9 +321,9 @@ trait InteractsWithRelations
 
         $this->fireHook('beforeDelete');
 
-        $deleted = $this->newBaseQuery()
+        $deleted = $this->runOnConnection(fn () => $this->newBaseQuery()
             ->where($this->getPrimaryKey(), $key)
-            ->update($columns);
+            ->update($columns));
 
         if ($deleted) {
             $this->forceFill($columns);
@@ -324,9 +347,9 @@ trait InteractsWithRelations
 
         $this->fireHook('beforeDelete');
 
-        $deleted = $this->newBaseQuery()
+        $deleted = $this->runOnConnection(fn () => $this->newBaseQuery()
             ->where($this->getPrimaryKey(), $key)
-            ->delete();
+            ->delete());
 
         if ($deleted) {
             $this->exists = false;

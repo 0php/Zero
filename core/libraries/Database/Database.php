@@ -6,10 +6,57 @@ use PDO;
 class Database {
     private static ?DatabaseConnection $transactionConnection = null;
     private static int $transactionLevel = 0;
+    private static array $connectionStack = [];
 
     private static function connection(): DatabaseConnection
     {
-        return self::$transactionConnection ?? new DatabaseConnection();
+        if (self::$transactionConnection !== null) {
+            return self::$transactionConnection;
+        }
+        return new DatabaseConnection(self::activeConnection());
+    }
+
+    public static function on(string $connection): DatabaseConnection
+    {
+        return new DatabaseConnection($connection);
+    }
+
+    /**
+     * Push a connection onto the active stack. All subsequent static calls
+     * (fetch/first/query/etc.) use this connection until popConnection() runs.
+     */
+    public static function useConnection(?string $name): void
+    {
+        self::$connectionStack[] = $name;
+    }
+
+    /**
+     * Pop the most recently pushed connection.
+     */
+    public static function popConnection(): void
+    {
+        array_pop(self::$connectionStack);
+    }
+
+    /**
+     * Get the currently active connection name (top of stack), or null for default.
+     */
+    public static function activeConnection(): ?string
+    {
+        return end(self::$connectionStack) ?: null;
+    }
+
+    /**
+     * Run a callback with a specific connection active, restoring afterward.
+     */
+    public static function withConnection(?string $name, callable $callback): mixed
+    {
+        self::useConnection($name);
+        try {
+            return $callback();
+        } finally {
+            self::popConnection();
+        }
     }
 
     public static function fetch($query, $bind=null, $params=null, $debug=false) {
@@ -111,8 +158,9 @@ class DatabaseConnection {
 
     public $driver;
 
-    public function __construct() {
-        $this->driver = config("database.".config('database.connection'));
+    public function __construct(?string $connection = null) {
+        $conn = $connection ?? config('database.connection');
+        $this->driver = config("database.{$conn}");
         $this->connect();
     }
 

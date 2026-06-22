@@ -22,8 +22,8 @@ chmod +x zero
 | --- | --- |
 | Server | [`serve`](#serve-the-application) |
 | Generators | [`make:controller`](#generate-a-controller), [`make:service`](#generate-a-service), [`make:model`](#generate-a-model), [`make:middleware`](#generate-a-middleware), [`make:helper`](#generate-a-helper), [`make:logger`](#generate-a-logger), [`make:command`](#generate-a-console-command), [`make:migration`](#generate-a-migration), [`make:seeder`](#generate-a-seeder), `make:job` |
-| Database | [`migrate`](#run-migrations), [`migrate:rollback`](#rollback-migrations), [`migrate:refresh`](#refresh-migrations), [`migrate:fresh`](#fresh-migrations), [`db:seed`](#run-a-seeder), [`db:dump`](#dump-the-database), [`db:restore`](#restore-the-database) |
-| App | [`key:generate`](#generate-app-key), [`route:list`](#inspect-registered-routes), [`storage:link`](#link-storage), [`log:clear`](#clear-log-files), [`schedule:run`](#run-scheduled-tasks), [`schedule:list`](#list-scheduled-tasks) |
+| Database | [`migrate`](#run-migrations), [`migrate:rollback`](#rollback-migrations), [`migrate:refresh`](#refresh-migrations), [`migrate:fresh`](#fresh-migrations), [`migrate:mark`](#mark-migrations-as-ran), [`db:seed`](#run-a-seeder), [`db:dump`](#dump-the-database), [`db:restore`](#restore-the-database) |
+| App | [`key:generate`](#generate-app-key), [`route:list`](#inspect-registered-routes), [`storage:link`](#link-storage), [`cache:clear`](#clear-the-view-cache), [`log:clear`](#clear-log-files), [`schedule:run`](#run-scheduled-tasks), [`schedule:list`](#list-scheduled-tasks) |
 | Queue | `queue:work`, `queue:retry`, `queue:forget`, `queue:flush`, `queue:table` — see [queue.md](queue.md) |
 
 ---
@@ -127,6 +127,15 @@ php zero migrate:fresh
 
 Drop every table in the database (ignoring individual `down()` methods) and run all migrations from scratch. Faster than `migrate:refresh` when downs are slow or missing.
 
+### Mark Migrations as Ran
+
+```bash
+php zero migrate:mark create_users_table   # mark one file
+php zero migrate:mark --all                 # mark every pending file
+```
+
+Records migrations in the migrations table **without executing them**. Use this when adopting a legacy database whose schema already exists, so the framework treats those migrations as already applied. The argument is a migration filename (with or without the `.php` extension); `--all` marks every file under `database/migrations` that has not been recorded yet. Files already marked are skipped.
+
 Migrations leverage the lightweight schema builder:
 
 ```php
@@ -186,6 +195,14 @@ php zero storage:link
 
 Creates symbolic links defined in `config/storage.php` (by default linking `public/storage` to the public disk). The command skips existing links and reports missing targets.
 
+### Clear the View Cache
+
+```bash
+php zero cache:clear
+```
+
+Deletes every compiled view in `storage/framework/views/cache`. Run it after deploying template changes when view caching is enabled (`VIEW_CACHE=true`), or whenever you want to force a fresh recompile. Placeholder files such as `.gitignore` are preserved.
+
 ### Clear Log Files
 
 ```bash
@@ -224,7 +241,7 @@ Bootstraps `routes/web.php` and prints a table with the HTTP method, URI, route 
 php zero key:generate
 ```
 
-Generates a base64-encoded random key and writes it to `.env` as `APP_KEY=base64:...`. The key is used for password hashing, JWT signing, and cookie encryption — keep it stable across deploys but never commit it to git. Re-running the command rotates the key (existing JWT cookies/sessions become invalid).
+Generates a base64-encoded random key and writes it to `.env` as `APP_KEY=base64:...`. The key powers JWT signing and cookie/value encryption (`Crypto::encrypt()`), and keep it stable across deploys but never commit it to git. Re-running the command rotates the key: existing JWT cookies/sessions become invalid, and values encrypted with the old key can no longer be decrypted. Password hashes are **not** affected by a rotation — they use plain bcrypt and do not depend on `APP_KEY` (see [Authentication](auth.md)).
 
 ### Run Scheduled Tasks
 

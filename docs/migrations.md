@@ -315,6 +315,14 @@ php zero migrate:refresh          # rollback all then re-run
 php zero migrate:fresh            # drop all tables then re-run
 ```
 
+Mark migrations as already-ran without executing them — useful when adopting a legacy database whose tables already exist:
+```bash
+php zero migrate:mark create_users_table   # mark a single file
+php zero migrate:mark --all                 # mark every pending file
+```
+
+This records the migration(s) in the migrations table so `migrate` skips them. Files already recorded are left untouched.
+
 ## Transactions
 
 Schema changes can be wrapped in transactions using the `Schema` facade (aliases the `Database` transaction helpers). Note that some databases auto-commit certain DDL statements.

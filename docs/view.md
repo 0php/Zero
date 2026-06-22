@@ -65,12 +65,50 @@ Output the captured section content. Used inside layouts via `@yield(...)`.
 ```
 
 ### `View::configure(array $config = []): void`
-Override the view config at runtime. Keys: `cache_enabled`, `cache_path`, `cache_lifetime`, `debug`. Defaults come from [`config/view.php`](../config/view.php).
+Override the view config at runtime. Keys: `cache_enabled`, `cache_path`, `cache_lifetime`, `debug`. Defaults are resolved from environment variables on first use (see [Configuration](#configuration) below).
 ```php
 View::configure([
     'cache_enabled' => true,
     'cache_lifetime' => 3600,
 ]);
+```
+
+### `View::share(string $key, mixed $value): void` / `View::shared(string $key, mixed $default = null): mixed`
+Share a value with every template in the current render (the page, its includes, and its layout). Because the view runs before the layout, a page can `share()` at the top and the layout/head will see it. Shared state is cleared between renders.
+```php
+// inside a page template
+@php(View::share('pageTitle', 'Dashboard'))
+
+// inside the layout
+<title>{{ View::shared('pageTitle', 'Zero') }}</title>
+```
+
+### `View::push(string $key, mixed $value): void`
+Append to a shared array bucket — handy when several places contribute to the same hook (extra `<link>` tags, preload hints, body classes). Read it back with `View::shared($key, [])`.
+```php
+@php(View::push('head', '<link rel="preload" href="/app.css" as="style">'))
+
+{{-- in the layout --}}
+@foreach (View::shared('head', []) as $tag)
+    {!! $tag !!}
+@endforeach
+```
+
+### `View::directive(string $name, callable $compile): void`
+Register a custom Blade-style directive. The callback receives the raw argument string (everything between the parentheses) and returns the PHP snippet to inline. The compiler picks these up automatically. Register directives once during bootstrap.
+```php
+View::directive('uppercase', fn ($args) => "<?= strtoupper({$args}) ?>");
+
+{{-- template --}}
+@uppercase($user->name)
+```
+
+### `View::composer(string $pattern, callable $callback): void`
+Run a callback right before a matching view renders — useful for injecting shared state without editing every page. `$pattern` matches the dotted view path and supports `*` wildcards; pass `*` to match all views.
+```php
+View::composer('pages.*', function (string $view) {
+    View::share('year', date('Y'));
+});
 ```
 
 ### `View::clearCache(): void`
@@ -184,9 +222,25 @@ See [i18n.md](i18n.md) for the full picture.
 
 ---
 
+## Configuration
+
+View settings are read from environment variables the first time the view system is used. Override them per-request with `View::configure()` if needed.
+
+| Env var | Config key | Default | Purpose |
+| --- | --- | --- | --- |
+| `VIEW_CACHE` | `cache_enabled` | `false` | Enable compiled-view caching. |
+| `VIEW_CACHE_PATH` | `cache_path` | `storage/framework` | Base directory for the cache (compiled views land in `<path>/views/cache`). |
+| `VIEW_CACHE_LIFETIME` | `cache_lifetime` | `86400` | Seconds before a cached view is considered stale. `0` = never expires (only mtime invalidates). |
+| `VIEW_DEBUG` | `debug` | `false` | Log compile/cache activity to the cache directory. |
+
+```ini
+VIEW_CACHE=true
+VIEW_CACHE_LIFETIME=0
+```
+
 ## Caching
 
-Compiled templates live under `storage/cache/views`. Toggle caching with `View::configure(['cache_enabled' => true])` or `config/view.php`. Each compiled file is keyed by an MD5 of the view identifier and re-validated against the source mtime on every render.
+Compiled templates live under `storage/framework/views/cache` (the `VIEW_CACHE_PATH` base plus `/views/cache`). Toggle caching with `VIEW_CACHE=true` or `View::configure(['cache_enabled' => true])`. Each compiled file is keyed by an MD5 of the view identifier and re-validated against the source mtime on every render. Clear it from the CLI with `php zero cache:clear`.
 
 To bust the cache for one view (e.g. after deploying a hot fix without a deploy script):
 ```php

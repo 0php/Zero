@@ -77,6 +77,24 @@ if ($claims === null) {
 
 ---
 
+## Password Hashing
+
+Passwords are hashed and verified through `Zero\Lib\Crypto` ([`Crypto.php`](../core/libraries/Crypto/Crypto.php)).
+
+```php
+use Zero\Lib\Crypto;
+
+$hash = Crypto::hash($plainPassword);              // store this
+$ok   = Crypto::validate($plainPassword, $hash);   // true / false
+```
+
+- `Crypto::hash()` produces a **plain bcrypt** hash (`PASSWORD_BCRYPT`), which is Laravel-compatible and does **not** depend on `APP_KEY`. Rotating `APP_KEY` therefore never invalidates stored passwords.
+- `Crypto::validate()` is backward compatible: it accepts both plain bcrypt hashes and the older `APP_KEY`-salted bcrypt format used by earlier versions of the framework, so existing users are never locked out after an upgrade.
+
+> Note: values encrypted with `Crypto::encrypt()` (cookies, signed payloads) **do** depend on `APP_KEY` — encryption uses AES-256-GCM with a key derived from it, and old AES-256-CBC values still decrypt via a legacy fallback. Rotating `APP_KEY` invalidates previously encrypted values but leaves password hashes intact.
+
+---
+
 ## Scaffold overview
 
 | Feature | Route | Controller |
@@ -94,7 +112,7 @@ All generated mail is dispatched through the `Mail` facade (`Zero\Lib\Mail\Maile
 ## Registration & Verification
 
 1. Visitors submit the registration form (`resources/views/auth/register.php`).
-2. `App\Controllers\Auth\RegisterController::store()` validates the payload, hashes the password with `Zero\Lib\Crypto::hash()`, creates the user, and delegates token creation/email delivery to `App\Services\Auth\EmailVerificationService`.
+2. `App\Controllers\Auth\RegisterController::store()` validates the payload, hashes the password with `Zero\Lib\Crypto::hash()` (plain bcrypt — see [Password Hashing](#password-hashing) below), creates the user, and delegates token creation/email delivery to `App\Services\Auth\EmailVerificationService`.
 3. Verification tokens are stored in `email_verification_tokens` with a one-hour expiry. Links look like `/email/verify/{token}?email=jane@example.com`.
 4. `App\Controllers\Auth\EmailVerificationController::verify()` ensures the token matches the email, checks expiry, marks `email_verified_at`, deletes outstanding tokens, and redirects to the login page with a success banner.
 5. Users can request a new link from the verification notice screen. The controller sends another email without leaking whether an account exists.
@@ -112,6 +130,19 @@ Successful logins issue a signed JWT (via `Zero\Lib\Auth\Auth::login()`), stored
 3. Tokens expire after 60 minutes and are unique per email. The reset link includes both the token and email, e.g. `/password/reset/{token}?email=jane@example.com`.
 4. `App\Controllers\Auth\PasswordResetController::show()` validates the token before rendering the reset form (`resources/views/auth/reset-password.php`).
 5. On submission `App\Controllers\Auth\PasswordResetController::update()` re-validates the token, hashes the new password, clears outstanding reset tokens, and redirects users back to the login page with a confirmation banner.
+
+## Session Fixation
+
+On any privilege change — successful login and logout — regenerate the session ID to prevent session-fixation attacks. `Zero\Lib\Session` exposes a helper for this:
+
+```php
+use Zero\Lib\Session;
+
+// after verifying credentials and before issuing the auth cookie
+Session::regenerate();        // new session id, existing data preserved
+```
+
+`Session::regenerate(bool $deleteOld = true)` issues a fresh session ID (deleting the old session file by default) and is a no-op when no session is active, so it is safe to call unconditionally.
 
 ## Session Driver
 
@@ -177,7 +208,7 @@ MAIL_FROM_ADDRESS=hello@example.com
 MAIL_FROM_NAME="Zero Framework"
 ```
 
-`APP_KEY` powers password hashing and encryption, while `APP_URL` is used to generate fully-qualified verification/reset links.
+`APP_KEY` powers JWT signing and value/cookie encryption (not password hashing — see [Password Hashing](#password-hashing)), while `APP_URL` is used to generate fully-qualified verification/reset links.
 
 ## Middleware & Guards
 

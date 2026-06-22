@@ -338,3 +338,21 @@ return back();                                     // Response::redirectBack
 $email = request('email');                         // Request::get
 $user  = auth();                                   // current user
 ```
+
+## CORS
+
+The framework ships an optional CORS helper at [`core/libraries/Http/cors_helper.php`](../core/libraries/Http/cors_helper.php). It is **not auto-loaded** — require it from your front controller or a middleware when you need cross-origin support:
+
+```php
+require_once core_path('libraries/Http/cors_helper.php');
+
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+cors_emit_headers($origin, $_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS'] ?? null);
+```
+
+- `cors_allowed_origins(): array` reads the `CORS_ALLOWED_ORIGINS` env var (comma-separated) and returns the allowlist.
+- `cors_emit_headers(string $origin, ?string $requestHeaders): void` emits the `Access-Control-*` headers. Allowlisted origins receive credentialed CORS (the echoed origin plus `Access-Control-Allow-Credentials: true`); every other origin gets a non-credentialed wildcard so public, cookie-less calls still work.
+
+```ini
+CORS_ALLOWED_ORIGINS=https://app.example.com,https://admin.example.com
+```

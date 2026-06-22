@@ -65,6 +65,82 @@ SQLITE_DATABASE=/absolute/path/to/storage/sqlite/zero.sqlite
 - SQLite creates the database file automatically when you run `php zero migrate`, so no manual provisioning is necessary.
 - Because SQLite locks the database file per write, avoid using it for high-concurrency web workloads.
 
+## Multiple Connections
+
+`config/database.php` can hold more than one connection definition. The top-level `connection` key names the default; every other key (`mysql`, `postgres`, `sqlite`, or any custom name you add) is a connection your code can target by name.
+
+```php
+// config/database.php
+return [
+    'connection' => env('DB_CONNECTION', 'mysql'),
+
+    'mysql' => [ /* primary app database */ ],
+
+    'analytics' => [
+        'driver'   => 'mysql',
+        'host'     => env('ANALYTICS_HOST', '127.0.0.1'),
+        'database' => env('ANALYTICS_DATABASE', 'analytics'),
+        'username' => env('ANALYTICS_USER', 'root'),
+        'password' => env('ANALYTICS_PASSWORD', ''),
+        'charset'  => 'utf8mb4',
+        'collation'=> 'utf8mb4_general_ci',
+    ],
+];
+```
+
+### Running queries on a specific connection
+
+The `Database` facade ([`Database.php`](../core/libraries/Database/Database.php)) lets you pick a connection per query or for a scoped block:
+
+```php
+use Zero\Lib\Database;
+
+// One-off connection instance (does not change the global default).
+$rows = Database::on('analytics')->fetch('SELECT * FROM events LIMIT 10');
+
+// Run a callback with a connection active; the previous connection is
+// restored afterward, even if the callback throws.
+$total = Database::withConnection('analytics', function () {
+    return Database::fetch('SELECT COUNT(*) AS c FROM events')[0]['c'];
+});
+```
+
+The active connection is tracked on a stack, so `withConnection()` calls nest correctly. The lower-level primitives are available if you need manual control:
+
+| Method | Purpose |
+| --- | --- |
+| `Database::on(string $name): DatabaseConnection` | Get a connection instance for `$name` without touching the active stack. |
+| `Database::withConnection(?string $name, callable $cb): mixed` | Run `$cb` with `$name` active, then restore. Preferred for scoped work. |
+| `Database::useConnection(?string $name): void` | Push `$name` onto the active stack manually. |
+| `Database::popConnection(): void` | Pop the most recently pushed connection. |
+| `Database::activeConnection(): ?string` | Name of the connection currently on top of the stack (`null` = default). |
+
+Passing `null` (or omitting the name) always resolves to the default connection from `config('database.connection')`, so existing single-connection code keeps working unchanged.
+
+### Per-model connections
+
+A model can pin itself to a non-default connection with the `$connection` property ([`Model.php`](../core/libraries/Model/Model.php)). Every read and write for that model — including its query builder and relation operations — then runs on that connection automatically:
+
+```php
+namespace App\Models;
+
+use Zero\Lib\Model;
+
+class Event extends Model
+{
+    protected ?string $connection = 'analytics';
+    protected static string $table = 'events';
+}
+```
+
+```php
+Event::all();                 // runs on the 'analytics' connection
+Event::where('type', 'click')->count();
+$event->save();               // writes go to 'analytics' too
+```
+
+Leave `$connection` as `null` (the default) to use the application's default connection.
+
 ## Common Tasks
 
 - `php zero migrate` — apply outstanding migrations for the active connection.

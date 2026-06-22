@@ -20,6 +20,19 @@ Implementation: [`Model.php`](../core/libraries/Model/Model.php), [`ModelQuery.p
 
 `__call` / `__callStatic` forward unknown methods to a fresh `ModelQuery`, so `User::where(...)`, `User::orderBy(...)`, etc., all work.
 
+### Database connection
+
+By default a model uses the application's default database connection. To pin a model to another connection defined in `config/database.php`, set the instance property `$connection`:
+
+```php
+class Event extends Model
+{
+    protected ?string $connection = 'analytics';
+}
+```
+
+All reads, writes, and relation queries for that model then run on the named connection. See [Database Connections](database-connections.md#per-model-connections) for the full multi-connection guide.
+
 ---
 
 ## Static query entry points

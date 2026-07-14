@@ -234,4 +234,4 @@ Bug reports and feature requests are welcome—open an issue or start a discussi
 
 ## License
 
-A license file has not been published yet. Add your preferred license at the repository root to clarify usage terms.
+Apache License 2.0 © 2026

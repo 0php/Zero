@@ -135,6 +135,12 @@ class Router
         $request = Request::capture();
         $requestUri = trim($requestUri, '/');
         $method = strtoupper($requestMethod);
+
+        // HEAD is answered by the matching GET route (uptime checks, link previews).
+        if ($method === 'HEAD') {
+            $method = 'GET';
+        }
+
         $routes = self::$routes[$method] ?? [];
         $host = self::resolveRequestHost($request);
 

@@ -130,6 +130,23 @@ final class Message
         return $this;
     }
 
+    /**
+     * Add one-click unsubscribe headers (RFC 8058). Gmail and Yahoo expect them from bulk
+     * senders; without a URL, links to APP_URL/unsubscribe for the first recipient.
+     */
+    public function listUnsubscribe(?string $url = null): self
+    {
+        if ($url === null) {
+            $email = $this->to[0]['address'] ?? '';
+            $url = rtrim((string) env('APP_URL', ''), '/') . '/unsubscribe' . ($email !== '' ? '?email=' . urlencode($email) : '');
+        }
+
+        $this->headers['List-Unsubscribe'] = '<' . $this->sanitizeHeaderValue($url) . '>';
+        $this->headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+
+        return $this;
+    }
+
     public function header(string $name, string $value): self
     {
         $this->headers[$this->sanitizeHeaderName($name)] = $this->sanitizeHeaderValue($value);
@@ -241,8 +258,8 @@ final class Message
     public function toMimeString(): string
     {
         if (empty($this->attachments)) {
-            $lines = $this->buildHeaderLines();
-            $body = $this->body === '' ? '' : $this->body;
+            [$contentHeaders, $body] = $this->buildBodyEntity();
+            $lines = array_merge($this->buildHeaderLines(null, false), $contentHeaders);
 
             return implode("\r\n", $lines) . "\r\n\r\n" . $body;
         }
@@ -257,7 +274,7 @@ final class Message
     /**
      * @return array<int, string>
      */
-    private function buildHeaderLines(?string $boundary = null): array
+    private function buildHeaderLines(?string $boundary = null, bool $withContentType = true): array
     {
         $lines = [];
         $lines[] = 'Date: ' . $this->formatDate();
@@ -286,10 +303,10 @@ final class Message
         $lines[] = 'MIME-Version: 1.0';
         if ($boundary !== null) {
             $lines[] = 'Content-Type: multipart/mixed; boundary="' . $boundary . '"';
-        } else {
+        } elseif ($withContentType) {
             $lines[] = 'Content-Type: ' . $this->contentType;
+            $lines[] = 'Content-Transfer-Encoding: 8bit';
         }
-        $lines[] = 'Content-Transfer-Encoding: 8bit';
 
         foreach ($this->headers as $name => $value) {
             $lines[] = $name . ': ' . $value;
@@ -419,15 +436,71 @@ final class Message
 
     private function buildBodyPart(string $boundary): string
     {
-        $body = $this->body === '' ? '' : $this->body;
+        [$contentHeaders, $body] = $this->buildBodyEntity();
 
-        return implode("\r\n", [
+        return implode("\r\n", array_merge(['--' . $boundary], $contentHeaders, ['', $body]));
+    }
+
+    /**
+     * Content headers and body of the message text. HTML gets a plain-text alternative,
+     * since HTML-only mail scores as spam; both are quoted-printable to keep lines short.
+     *
+     * @return array{0: array<int, string>, 1: string}
+     */
+    private function buildBodyEntity(): array
+    {
+        if (! str_starts_with($this->contentType, 'text/html')) {
+            return [
+                ['Content-Type: ' . $this->contentType, 'Content-Transfer-Encoding: quoted-printable'],
+                $this->encodeQuotedPrintable($this->body),
+            ];
+        }
+
+        $boundary = $this->generateBoundary();
+        $body = implode("\r\n", [
+            '--' . $boundary,
+            'Content-Type: text/plain; charset=UTF-8',
+            'Content-Transfer-Encoding: quoted-printable',
+            '',
+            $this->encodeQuotedPrintable($this->htmlToText($this->body)),
             '--' . $boundary,
             'Content-Type: ' . $this->contentType,
-            'Content-Transfer-Encoding: 8bit',
+            'Content-Transfer-Encoding: quoted-printable',
             '',
-            $body,
+            $this->encodeQuotedPrintable($this->body),
+            '--' . $boundary . '--',
         ]);
+
+        return [['Content-Type: multipart/alternative; boundary="' . $boundary . '"'], $body];
+    }
+
+    private function encodeQuotedPrintable(string $body): string
+    {
+        // Encode with CRLF line breaks in place so they stay real line breaks, not =0A.
+        return quoted_printable_encode($this->normalizeLineEndings($body));
+    }
+
+    private function htmlToText(string $html): string
+    {
+        $html = str_replace("\r", '', $html);
+        $html = preg_replace('#<(head|style|script)\b[^>]*>.*?</\1>#is', '', $html) ?? $html;
+        // Keep link targets readable in the text version.
+        $html = preg_replace_callback('#<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>#is', function (array $m): string {
+            $label = trim(strip_tags($m[2]));
+            $url = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+            return $label === '' || $label === $url ? $url : $label . ' (' . $url . ')';
+        }, $html) ?? $html;
+        $html = preg_replace('#<br\s*/?>#i', "\n", $html) ?? $html;
+        $html = preg_replace('#</t[dh]>#i', '  ', $html) ?? $html;
+        $html = preg_replace('#</(p|div|h[1-6]|li|table)>#i', "\n\n", $html) ?? $html;
+        $html = preg_replace('#</tr>#i', "\n", $html) ?? $html;
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace("/[ \t]+/", ' ', $text) ?? $text;
+        $text = preg_replace("/ *\n */", "\n", $text) ?? $text;
+        $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
+
+        return trim($text) . "\n";
     }
 
     /**

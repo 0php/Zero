@@ -34,8 +34,27 @@ class Auth
      */
     public static function logout(): void
     {
+        $token = $_COOKIE[self::COOKIE] ?? null;
+
+        if (is_string($token) && $token !== '') {
+            $payload = Jwt::decode($token);
+
+            // Revoke the token server side so a copied/stolen cookie stops working right away.
+            if ($payload !== null && isset($payload['exp'])) {
+                self::revokeToken($token, (int) $payload['exp']);
+            }
+        }
+
         self::queueCookie('', -3600);
         unset($_COOKIE[self::COOKIE]);
+    }
+
+    /**
+     * Invalidate every token issued to the user until now (e.g. after a password change or reset).
+     */
+    public static function revokeAllFor(int|string $userId): void
+    {
+        self::writeRevocation('user_' . sha1((string) $userId), (string) time(), time() + max(60, (int) (config('auth.token_ttl') ?? self::DEFAULT_TTL)));
     }
 
     /**
@@ -43,15 +62,92 @@ class Auth
      */
     public static function user(): mixed
     {
-        $token = $_COOKIE[self::COOKIE] ?? null;
-        $payload = Jwt::decode($token);
+        $payload = self::validPayload();
 
         if ($payload === null) {
-            self::logout();
+            self::queueCookie('', -3600);
+            unset($_COOKIE[self::COOKIE]);
             return false;
         }
 
         return User::query()->find($payload['sub']) ?: null;
+    }
+
+    /**
+     * Verified, non-revoked token payload for the current request.
+     */
+    protected static function validPayload(): ?array
+    {
+        $token = $_COOKIE[self::COOKIE] ?? null;
+        $payload = Jwt::decode(is_string($token) ? $token : null);
+
+        if ($payload === null || !isset($payload['sub'])) {
+            return null;
+        }
+
+        if (self::readRevocation('token_' . hash('sha256', (string) $token)) !== null) {
+            return null;
+        }
+
+        $validAfter = self::readRevocation('user_' . sha1((string) $payload['sub']));
+
+        if ($validAfter !== null && (int) ($payload['iat'] ?? 0) < (int) $validAfter) {
+            return null;
+        }
+
+        return $payload;
+    }
+
+    protected static function revokeToken(string $token, int $expiresAt): void
+    {
+        if ($expiresAt > time()) {
+            self::writeRevocation('token_' . hash('sha256', $token), '1', $expiresAt);
+        }
+    }
+
+    protected static function revocationDirectory(): string
+    {
+        return rtrim(storage_path('cache/auth_revocations'), '/\\');
+    }
+
+    protected static function writeRevocation(string $key, string $value, int $expiresAt): void
+    {
+        $dir = self::revocationDirectory();
+
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+
+        @file_put_contents($dir . DIRECTORY_SEPARATOR . $key, $expiresAt . '|' . $value, LOCK_EX);
+
+        // Opportunistic cleanup of expired entries.
+        if (random_int(1, 50) === 1) {
+            foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $file) {
+                $content = (string) @file_get_contents($file);
+                if ((int) strtok($content, '|') < time()) {
+                    @unlink($file);
+                }
+            }
+        }
+    }
+
+    protected static function readRevocation(string $key): ?string
+    {
+        $file = self::revocationDirectory() . DIRECTORY_SEPARATOR . $key;
+
+        if (!is_file($file)) {
+            return null;
+        }
+
+        $content = (string) @file_get_contents($file);
+        [$expiresAt, $value] = array_pad(explode('|', $content, 2), 2, '');
+
+        if ((int) $expiresAt < time()) {
+            @unlink($file);
+            return null;
+        }
+
+        return $value;
     }
 
     /**
@@ -63,7 +159,7 @@ class Auth
      */
     public static function id(): mixed
     {
-        $payload = Jwt::decode($_COOKIE[self::COOKIE] ?? null);
+        $payload = self::validPayload();
 
         return $payload['sub'] ?? null;
     }

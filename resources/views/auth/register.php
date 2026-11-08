@@ -50,6 +50,7 @@ cn:
     @endif
 
     <form method="POST" action="{{ route('auth.register.store') }}" class="card shadow-sm p-4">
+        <input type="hidden" name="_token" value="{{ csrf_token() }}">
         <div class="mb-3">
             <label for="name" class="form-label">@t('name')</label>
             <input

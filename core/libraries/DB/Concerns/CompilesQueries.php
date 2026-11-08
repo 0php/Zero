@@ -66,7 +66,7 @@ trait CompilesQueries
                 $join['type'],
                 $this->wrapTable($join['table'], $join['alias']),
                 $this->wrap($join['first']),
-                $join['operator'] ?? '=',
+                $this->compileOperator($join['operator'] ?? '='),
                 $this->wrap((string) $join['second'])
             );
         }
@@ -87,7 +87,7 @@ trait CompilesQueries
 
             switch ($where['type']) {
                 case 'basic':
-                    $parts[] = $boolean . $this->wrap($where['column']) . ' ' . $where['operator'] . ' ?';
+                    $parts[] = $boolean . $this->wrap($where['column']) . ' ' . $this->compileOperator($where['operator']) . ' ?';
                     break;
                 case 'raw':
                     $parts[] = $boolean . $where['sql'];
@@ -173,7 +173,7 @@ trait CompilesQueries
 
             switch ($having['type']) {
                 case 'basic':
-                    $parts[] = $boolean . $this->wrap($having['column']) . ' ' . $having['operator'] . ' ?';
+                    $parts[] = $boolean . $this->wrap($having['column']) . ' ' . $this->compileOperator($having['operator']) . ' ?';
                     break;
                 case 'raw':
                     $parts[] = $boolean . $having['sql'];
@@ -264,14 +264,21 @@ trait CompilesQueries
             return '*';
         }
 
+        if ($this->isIdentifier($value)) {
+            $segments = $this->splitIdentifier($value);
+            $segments = array_map([$this, 'wrapValue'], $segments);
+
+            return implode('.', $segments);
+        }
+
         if ($this->isExpression($value)) {
             return $value;
         }
 
-        $segments = explode('.', $value);
-        $segments = array_map([$this, 'wrapValue'], $segments);
-
-        return implode('.', $segments);
+        throw new InvalidArgumentException(sprintf(
+            'Invalid column or table identifier [%s]. Use DBML::raw() for SQL expressions.',
+            $value
+        ));
     }
 
     protected function wrapValue(string $value): string
@@ -285,9 +292,57 @@ trait CompilesQueries
         return '`' . str_replace('`', '``', $value) . '`';
     }
 
+    /**
+     * A plain identifier: name, table.name, table.*, optionally already quoted with backticks or double quotes.
+     */
+    protected function isIdentifier(string $value): bool
+    {
+        $segment = '(?:[A-Za-z_][A-Za-z0-9_$]*|`[^`]+`|"[^"]+")';
+
+        return preg_match('/^' . $segment . '(?:\.' . $segment . ')*(?:\.\*)?$/', $value) === 1;
+    }
+
+    protected function splitIdentifier(string $value): array
+    {
+        preg_match_all('/`[^`]+`|"[^"]+"|[^.]+/', $value, $matches);
+
+        return $matches[0];
+    }
+
+    /**
+     * Only simple function calls over identifiers are accepted as inline expressions, e.g. COUNT(*),
+     * SUM(orders.total) or DATE(created_at). Anything else (subqueries, operators, keywords, comments)
+     * must be passed explicitly through DBML::raw() so user input can never become SQL.
+     */
     protected function isExpression(string $value): bool
     {
-        return str_contains($value, '(') || str_contains($value, ')') || str_contains($value, ' ');
+        $identifier = '(?:[A-Za-z_][A-Za-z0-9_$]*|`[^`]+`|"[^"]+")(?:\.(?:[A-Za-z_][A-Za-z0-9_$]*|`[^`]+`|"[^"]+"))*';
+        $argument = '(?:' . $identifier . '|\d+(?:\.\d+)?|\'[^\'\\\\]*\')';
+        $arguments = '(?:\*|(?:DISTINCT\s+)?' . $argument . '(?:\s*,\s*' . $argument . ')*)?';
+
+        return preg_match('/^[A-Za-z_][A-Za-z0-9_]*\(\s*' . $arguments . '\s*\)$/i', $value) === 1;
+    }
+
+    /**
+     * Comparison operators allowed in WHERE / HAVING / JOIN clauses.
+     */
+    protected function compileOperator(mixed $operator): string
+    {
+        $normalized = strtoupper(trim((string) preg_replace('/\s+/', ' ', (string) ($operator ?? '='))));
+
+        $allowed = [
+            '=', '<', '>', '<=', '>=', '<>', '!=', '<=>',
+            'LIKE', 'NOT LIKE', 'ILIKE', 'NOT ILIKE', 'LIKE BINARY',
+            'REGEXP', 'NOT REGEXP', 'RLIKE', 'NOT RLIKE', 'GLOB', 'NOT GLOB',
+            'SIMILAR TO', 'NOT SIMILAR TO', 'IS', 'IS NOT',
+            '&', '|', '^', '<<', '>>', '&~',
+        ];
+
+        if (!in_array($normalized, $allowed, true)) {
+            throw new InvalidArgumentException(sprintf('Invalid SQL operator [%s].', (string) $operator));
+        }
+
+        return $normalized;
     }
 
     protected function parseTableAlias(string $table, ?string $alias = null): array

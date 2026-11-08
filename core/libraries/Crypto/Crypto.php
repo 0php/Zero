@@ -138,11 +138,9 @@ class Crypto
     /**
      * Decrypt a value produced by encrypt().
      *
-     * Verifies the GCM auth tag before returning plaintext. For backward
-     * compatibility with tokens/cookies issued before the GCM migration, this
-     * falls back to the legacy AES-256-CBC format when the GCM tag does not
-     * authenticate. The legacy path can be removed once all old cookies/tokens
-     * have expired.
+     * Verifies the GCM auth tag before returning plaintext. The legacy
+     * AES-256-CBC format (pre-GCM, no MAC) is only accepted when
+     * CRYPTO_LEGACY_CBC=true is set explicitly.
      *
      * @throws \Exception
      */
@@ -172,6 +170,12 @@ class Crypto
             if ($decrypted !== false) {
                 return $decrypted;
             }
+        }
+
+        // The unauthenticated CBC fallback is a padding-oracle risk; only enabled for apps that still
+        // hold pre-GCM ciphertext and explicitly opt in (re-encrypt that data, then turn it off).
+        if (!filter_var(env('CRYPTO_LEGACY_CBC', 'false'), FILTER_VALIDATE_BOOL)) {
+            throw new \Exception('Failed to decrypt the value.');
         }
 
         return self::decryptLegacyCbc($data);

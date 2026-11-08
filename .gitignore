@@ -15,6 +15,7 @@ storage/logs
 
 storage/framework/schedule
 storage/cache/rate_limit
+storage/cache/auth_revocations
 
 storage/meta/*
 storage/database/*

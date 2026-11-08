@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zero\Lib\Storage\Controllers;
 
+use Zero\Lib\Filesystem\MimeTypeMap;
 use Zero\Lib\Http\Request;
 use Zero\Lib\Http\Response;
 use Zero\Lib\Storage\Storage;
@@ -46,13 +47,34 @@ final class PrivateFileController
             return Response::make('Not Found', 404);
         }
 
-        $disposition = $request->input('download') ? 'attachment' : 'inline';
+        $disposition = $request->input('download') || $this->isActiveContent($normalized) ? 'attachment' : 'inline';
 
         return Storage::response($normalized, self::DISK, [
             'disposition' => $disposition,
             'headers' => [
                 'Cache-Control' => 'private, max-age=0, must-revalidate',
+                'X-Content-Type-Options' => 'nosniff',
+                // Even if a browser renders the file, it cannot run script on the app origin.
+                'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox",
             ],
         ]);
+    }
+
+    /**
+     * HTML, SVG, XML and script files are always downloaded instead of rendered inline (stored XSS).
+     */
+    private function isActiveContent(string $path): bool
+    {
+        if (MimeTypeMap::isActiveContent((string) pathinfo($path, PATHINFO_EXTENSION))) {
+            return true;
+        }
+
+        try {
+            $mime = strtolower((string) Storage::disk(self::DISK)->mimeType($path));
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return str_contains($mime, 'html') || str_contains($mime, 'svg') || str_contains($mime, 'xml') || str_contains($mime, 'javascript');
     }
 }

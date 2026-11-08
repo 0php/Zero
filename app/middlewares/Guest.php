@@ -16,6 +16,6 @@ class Guest
 
         $target = Session::get('auth_redirect') ?: '/';
 
-        return Response::redirect($target);
+        return Response::redirect(Response::safeRedirectTarget(is_string($target) ? $target : null, '/'));
     }
 }

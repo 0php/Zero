@@ -90,10 +90,16 @@ class AuthController
         Session::remove('auth_old');
         Session::remove('auth_errors');
 
+        // New session id and CSRF token after authentication (session fixation).
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            @session_regenerate_id(true);
+        }
+        Session::remove('_csrf_token');
+
         $intended = Session::get('auth_redirect');
         Session::remove('auth_redirect');
 
-        return Response::redirect($intended ?: '/');
+        return Response::redirect(Response::safeRedirectTarget(is_string($intended) ? $intended : null, '/'));
     }
 
     /**

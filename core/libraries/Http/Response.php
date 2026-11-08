@@ -91,9 +91,49 @@ class Response
     public static function redirectBack(string $fallback = '/', int $status = 302, array $headers = []): static
     {
         $referer = Request::instance()->header('referer', $fallback);
-        $target = $referer !== null && $referer !== '' ? $referer : $fallback;
+        $target = static::safeRedirectTarget(is_string($referer) ? $referer : null, $fallback);
 
         return static::redirect($target, $status, $headers);
+    }
+
+    /**
+     * Return $target when it points to this application (a local path or an absolute URL on the
+     * APP_URL / current host), otherwise $fallback. Prevents open redirects through Referer or
+     * user supplied "redirect"/"intended" values.
+     */
+    public static function safeRedirectTarget(?string $target, string $fallback = '/'): string
+    {
+        $target = trim((string) $target);
+
+        if ($target === '' || preg_match('/[\x00-\x1F\x7F\\\\]/', $target) === 1) {
+            return $fallback;
+        }
+
+        // Local path: "/dashboard" but not protocol-relative "//evil.com".
+        if ($target[0] === '/') {
+            return (strlen($target) > 1 && $target[1] === '/') ? $fallback : $target;
+        }
+
+        $parts = parse_url($target);
+
+        if (!is_array($parts) || !isset($parts['scheme'], $parts['host']) || !in_array(strtolower($parts['scheme']), ['http', 'https'], true)) {
+            return $fallback;
+        }
+
+        $allowed = [];
+        $appHost = parse_url((string) (function_exists('env') ? env('APP_URL', '') : ''), PHP_URL_HOST);
+
+        if (is_string($appHost) && $appHost !== '') {
+            $allowed[] = strtolower($appHost);
+        }
+
+        $requestHost = parse_url(Request::instance()->root(), PHP_URL_HOST);
+
+        if (is_string($requestHost) && $requestHost !== '') {
+            $allowed[] = strtolower($requestHost);
+        }
+
+        return in_array(strtolower($parts['host']), $allowed, true) ? $target : $fallback;
     }
 
     public static function stream(callable|string $stream, int $status = 200, array $headers = [], string $contentType = 'text/event-stream'): static

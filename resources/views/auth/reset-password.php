@@ -46,6 +46,7 @@ cn:
     @endif
 
     <form method="POST" action="{{ route('auth.password.update') }}" class="card shadow-sm p-4">
+        <input type="hidden" name="_token" value="{{ csrf_token() }}">
         <input type="hidden" name="token" value="{{ $token }}">
         <input type="hidden" name="email" value="{{ $email }}">
 

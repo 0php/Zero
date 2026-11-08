@@ -1,6 +1,10 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Never execute scripts or serve server config from the public storage link (user uploads)
+    RewriteRule ^storage/(.*/)?\.ht - [F,NC,L]
+    RewriteRule ^storage/.*\.(php\d?|phtml|pht|phar|phps|inc|cgi|pl|py|sh|shtml)(\.|$) - [F,NC,L]
+
     # Serve existing files/directories directly
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
@@ -14,6 +18,11 @@
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "SAMEORIGIN"
     Header set X-XSS-Protection "1; mode=block"
+
+    # Uploaded HTML/SVG under /storage cannot run script on the application origin
+    <If "%{REQUEST_URI} =~ m#^/storage/#">
+        Header set Content-Security-Policy "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox"
+    </If>
 </IfModule>
 
 Options -Indexes

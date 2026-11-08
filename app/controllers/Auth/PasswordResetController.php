@@ -5,6 +5,7 @@ namespace App\Controllers\Auth;
 use App\Models\PasswordResetToken;
 use App\Models\User;
 use App\Services\Auth\PasswordResetService;
+use Zero\Lib\Auth\Auth;
 use Zero\Lib\Http\Request;
 use Zero\Lib\Http\Response;
 use Zero\Lib\Session;
@@ -127,6 +128,7 @@ class PasswordResetController
 
         PasswordResetService::resetPassword($user, $password);
         PasswordResetToken::query()->where('email', $email)->delete();
+        Auth::revokeAllFor($user->id);
 
         Session::set('status', 'Your password has been updated. Please sign in.');
 

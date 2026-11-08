@@ -61,11 +61,20 @@ class Model implements JsonSerializable
     protected ?string $uuidColumn = null;
 
     /**
-     * List of attributes that are mass assignable. Empty array permits all.
+     * List of attributes that are mass assignable through fill()/create()/update().
      *
      * @var string[]
      */
     protected array $fillable = [];
+
+    /**
+     * Attributes that are never mass assignable. Only consulted when $fillable is empty.
+     * The default ['*'] blocks every attribute; set it to [] (or a list of protected columns)
+     * to explicitly allow mass assignment of everything else.
+     *
+     * @var string[]
+     */
+    protected array $guarded = ['*'];
 
     /**
      * Whether created_at/updated_at columns should be maintained automatically.
@@ -372,7 +381,7 @@ class Model implements JsonSerializable
     public function fill(array $attributes): static
     {
         foreach ($attributes as $key => $value) {
-            if ($this->isFillable($key)) {
+            if ($this->isFillable((string) $key)) {
                 $this->attributes[$key] = $value;
             }
         }

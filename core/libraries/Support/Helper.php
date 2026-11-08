@@ -312,6 +312,33 @@ if (!function_exists('session')) {
     }
 }
 
+if (!function_exists('csrf_token')) {
+    /**
+     * The CSRF token bound to the current session (created on first use).
+     */
+    function csrf_token(): string
+    {
+        $token = Session::get('_csrf_token');
+
+        if (!is_string($token) || strlen($token) < 40) {
+            $token = bin2hex(random_bytes(32));
+            Session::set('_csrf_token', $token);
+        }
+
+        return $token;
+    }
+}
+
+if (!function_exists('csrf_field')) {
+    /**
+     * Hidden form input carrying the CSRF token (output unescaped).
+     */
+    function csrf_field(): string
+    {
+        return '<input type="hidden" name="_token" value="' . htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+    }
+}
+
 if (!function_exists('old')) {
     /**
      * Retrieve a value from previously flashed input.

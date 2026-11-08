@@ -20,7 +20,7 @@ class RateLimiter
     {
         $parts = [];
         $ip = (string) ($request->ip() ?? ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
-        $route = (string) ($_SERVER['REQUEST_METHOD'] ?? 'GET') . ' ' . (string) ($_SERVER['REQUEST_URI'] ?? '/');
+        $route = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET')) . ' ' . $this->normalizePath((string) ($_SERVER['REQUEST_URI'] ?? '/'));
 
         switch ($strategy) {
             case 'route':
@@ -41,6 +41,20 @@ class RateLimiter
         }
 
         return sha1(implode('|', $parts));
+    }
+
+    /**
+     * Strip the query string, collapse duplicate slashes and drop the trailing slash so that
+     * /login, /login/, /login?x=1 and //login share one bucket.
+     */
+    private function normalizePath(string $uri): string
+    {
+        $path = (string) (parse_url('http://localhost' . '/' . ltrim($uri, '/'), PHP_URL_PATH) ?? '/');
+        $path = rawurldecode($path);
+        $path = (string) preg_replace('#/+#', '/', $path);
+        $path = rtrim(strtolower($path), '/');
+
+        return $path === '' ? '/' : $path;
     }
 
     /**

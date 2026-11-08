@@ -216,11 +216,17 @@ trait InteractsWithRelations
      */
     protected function isFillable(string $key): bool
     {
-        if ($this->fillable === []) {
-            return true;
+        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $key) !== 1) {
+            return false;
         }
 
-        return in_array($key, $this->fillable, true);
+        if ($this->fillable !== []) {
+            return in_array($key, $this->fillable, true);
+        }
+
+        $guarded = $this->guarded ?? ['*'];
+
+        return !in_array('*', $guarded, true) && !in_array($key, $guarded, true);
     }
 
     /**

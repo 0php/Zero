@@ -1,94 +1,214 @@
 <?php
-// update.php
-// Run this script inside your project folder to update only core/ and zero
+// updater
+// Run this script inside your project folder to update core/ and zero.
+//
+//   php updater                      latest commit of main (resolved to an immutable commit SHA)
+//   php updater --ref=v1.2.0         a tag, branch or commit SHA
+//   php updater --ref=v1.2.0 --sha256=<hash>   also verify the archive checksum (recommended)
+//   php updater --yes                skip the confirmation prompt
+//
+// Your config/ files and app/ middlewares are never overwritten; only missing files are added.
 
-echo "🔄 Updating Zero PHP Framework...\n";
+const ZERO_UPDATE_REPO = '0php/Zero';
 
-// Variables
-$url = "https://github.com/0php/Zero/archive/refs/heads/main.zip";
-$zipFile = "main.zip";
-$defaultDir = "Zero-main";
+$options = getopt('', ['ref::', 'sha256::', 'yes']);
+$ref = isset($options['ref']) && is_string($options['ref']) && $options['ref'] !== '' ? $options['ref'] : 'main';
+$expectedSha256 = isset($options['sha256']) && is_string($options['sha256']) ? strtolower(trim($options['sha256'])) : (getenv('ZERO_UPDATE_SHA256') ?: '');
+$assumeYes = isset($options['yes']);
 
-// Create a temporary folder
-$tmpDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . uniqid("zero_update_", true);
-mkdir($tmpDir);
-
-// Download the latest source
-$zipPath = $tmpDir . DIRECTORY_SEPARATOR . $zipFile;
-file_put_contents($zipPath, file_get_contents($url));
-
-// Extract the zip
-$zip = new ZipArchive;
-if ($zip->open($zipPath) === TRUE) {
-    $zip->extractTo($tmpDir);
-    $zip->close();
-} else {
-    die("❌ Failed to extract archive.\n");
+function fail(string $message): void
+{
+    fwrite(STDERR, "❌ {$message}\n");
+    exit(1);
 }
 
-// Copy core/ directory
-$srcCore = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "core";
-$dstCore = __DIR__ . DIRECTORY_SEPARATOR . "core";
+function httpGet(string $url, string $accept = '*/*'): string
+{
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'header' => "User-Agent: zero-updater\r\nAccept: {$accept}\r\n",
+            'timeout' => 60,
+            'follow_location' => 1,
+            'max_redirects' => 5,
+        ],
+        'ssl' => [
+            'verify_peer' => true,
+            'verify_peer_name' => true,
+        ],
+    ]);
 
-// Recursively copy with overwrite
-function copyDirectory($src, $dst) {
-    $dir = opendir($src);
-    if (!is_dir($dst)) {
-        mkdir($dst, 0777, true);
+    $body = @file_get_contents($url, false, $context);
+
+    if ($body === false || $body === '') {
+        fail("Download failed: {$url}");
     }
+
+    return $body;
+}
+
+function removeDirectory(string $dir): void
+{
+    if (!is_dir($dir)) {
+        return;
+    }
+
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($it as $file) {
+        $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+    }
+
+    rmdir($dir);
+}
+
+function copyDirectory(string $src, string $dst, bool $overwrite = true): void
+{
+    if (!is_dir($dst)) {
+        mkdir($dst, 0755, true);
+    }
+
+    $dir = opendir($src);
+
     while (false !== ($file = readdir($dir))) {
-        if ($file === '.' || $file === '..') continue;
+        if ($file === '.' || $file === '..') {
+            continue;
+        }
+
         $srcPath = $src . DIRECTORY_SEPARATOR . $file;
         $dstPath = $dst . DIRECTORY_SEPARATOR . $file;
+
         if (is_dir($srcPath)) {
-            copyDirectory($srcPath, $dstPath);
-        } else {
+            copyDirectory($srcPath, $dstPath, $overwrite);
+        } elseif ($overwrite || !file_exists($dstPath)) {
             copy($srcPath, $dstPath);
         }
     }
+
     closedir($dir);
 }
 
-// Replace core/ contents
-if (is_dir($dstCore)) {
-    // Delete old contents first
-    $it = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($dstCore, RecursiveDirectoryIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
-    );
-    foreach ($it as $file) {
-        $file->isDir() ? rmdir($file) : unlink($file);
+if (!preg_match('/^[A-Za-z0-9._\/-]{1,100}$/', $ref) || str_contains($ref, '..')) {
+    fail('Invalid --ref value.');
+}
+
+if ($expectedSha256 !== '' && !preg_match('/^[a-f0-9]{64}$/', $expectedSha256)) {
+    fail('Invalid --sha256 value, expected 64 hex characters.');
+}
+
+echo "🔄 Updating Zero PHP Framework...\n";
+
+// Resolve the ref to an immutable commit so the archive cannot change between check and download.
+$commitJson = json_decode(httpGet('https://api.github.com/repos/' . ZERO_UPDATE_REPO . '/commits/' . rawurlencode($ref), 'application/vnd.github+json'), true);
+$commit = is_array($commitJson) ? (string) ($commitJson['sha'] ?? '') : '';
+
+if (!preg_match('/^[a-f0-9]{40}$/', $commit)) {
+    fail("Unable to resolve ref [{$ref}] to a commit.");
+}
+
+echo "   Ref: {$ref}\n   Commit: {$commit}\n";
+
+if ($expectedSha256 === '') {
+    echo "⚠️  No --sha256 given: the archive is only protected by TLS. Pass --sha256 for a verified update.\n";
+}
+
+if (!$assumeYes) {
+    echo "Continue? [y/N] ";
+    $answer = strtolower(trim((string) fgets(STDIN)));
+
+    if ($answer !== 'y' && $answer !== 'yes') {
+        fail('Aborted.');
     }
 }
-copyDirectory($srcCore, $dstCore);
 
-// Copy app/Middlewares directory without deleting existing files
-$srcMiddlewares = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "app" . DIRECTORY_SEPARATOR . "Middlewares";
-$dstMiddlewares = __DIR__ . DIRECTORY_SEPARATOR . "app" . DIRECTORY_SEPARATOR . "Middlewares";
-if (is_dir($srcMiddlewares)) {
-    copyDirectory($srcMiddlewares, $dstMiddlewares);
+$tmpDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'zero_update_' . bin2hex(random_bytes(8));
+
+if (!mkdir($tmpDir, 0700) && !is_dir($tmpDir)) {
+    fail('Unable to create a temporary directory.');
 }
 
-// Copy config directory without deleting existing files
-$srcConfig = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "config";
-$dstConfig = __DIR__ . DIRECTORY_SEPARATOR . "config";
-if (is_dir($srcConfig)) {
-    copyDirectory($srcConfig, $dstConfig);
+register_shutdown_function(static fn () => removeDirectory($tmpDir));
+
+$zipPath = $tmpDir . DIRECTORY_SEPARATOR . 'zero.zip';
+$archive = httpGet('https://codeload.github.com/' . ZERO_UPDATE_REPO . '/zip/' . $commit, 'application/zip');
+
+if (file_put_contents($zipPath, $archive) === false) {
+    fail('Unable to write the downloaded archive.');
 }
 
-// Copy zero file
-$srcZero = $tmpDir . DIRECTORY_SEPARATOR . $defaultDir . DIRECTORY_SEPARATOR . "zero";
-$dstZero = __DIR__ . DIRECTORY_SEPARATOR . "zero";
-copy($srcZero, $dstZero);
+$actualSha256 = hash_file('sha256', $zipPath);
+echo "   Archive SHA-256: {$actualSha256}\n";
 
-// Cleanup
-$it = new RecursiveIteratorIterator(
-    new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS),
-    RecursiveIteratorIterator::CHILD_FIRST
-);
-foreach ($it as $file) {
-    $file->isDir() ? rmdir($file) : unlink($file);
+if ($expectedSha256 !== '' && !hash_equals($expectedSha256, $actualSha256)) {
+    fail('Checksum mismatch, update aborted. Nothing was changed.');
 }
-rmdir($tmpDir);
 
-echo "✅ Update Zero PHP Framework completed\n";
+$zip = new ZipArchive();
+
+if ($zip->open($zipPath) !== true) {
+    fail('Failed to open the archive.');
+}
+
+for ($i = 0; $i < $zip->numFiles; $i++) {
+    $entry = (string) $zip->getNameIndex($i);
+
+    if (str_starts_with($entry, '/') || str_contains($entry, '..') || str_contains($entry, "\0")) {
+        $zip->close();
+        fail("Unsafe path in archive: {$entry}");
+    }
+}
+
+$zip->extractTo($tmpDir);
+$zip->close();
+
+$sourceRoot = null;
+
+foreach (glob($tmpDir . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [] as $candidate) {
+    if (is_file($candidate . '/core/bootstrap.php') && is_file($candidate . '/zero')) {
+        $sourceRoot = $candidate;
+        break;
+    }
+}
+
+if ($sourceRoot === null) {
+    fail('Archive does not look like a Zero framework release. Nothing was changed.');
+}
+
+// Stage the new core next to the old one, then swap, so a failure never leaves core/ half deleted.
+$dstCore = __DIR__ . DIRECTORY_SEPARATOR . 'core';
+$stagedCore = __DIR__ . DIRECTORY_SEPARATOR . '.core_update_' . bin2hex(random_bytes(4));
+$oldCore = __DIR__ . DIRECTORY_SEPARATOR . '.core_old_' . bin2hex(random_bytes(4));
+
+copyDirectory($sourceRoot . DIRECTORY_SEPARATOR . 'core', $stagedCore);
+
+if (is_dir($dstCore) && !rename($dstCore, $oldCore)) {
+    removeDirectory($stagedCore);
+    fail('Unable to move the current core/ aside.');
+}
+
+if (!rename($stagedCore, $dstCore)) {
+    if (is_dir($oldCore)) {
+        rename($oldCore, $dstCore);
+    }
+    fail('Unable to install the new core/. The previous version was restored.');
+}
+
+removeDirectory($oldCore);
+
+// Add new middlewares / config files without touching existing (possibly customised) ones.
+foreach ([['app', 'middlewares'], ['app', 'Middlewares'], ['config']] as $segments) {
+    $relative = implode(DIRECTORY_SEPARATOR, $segments);
+    $src = $sourceRoot . DIRECTORY_SEPARATOR . $relative;
+    $dst = __DIR__ . DIRECTORY_SEPARATOR . $relative;
+
+    if (is_dir($src) && ($segments[0] === 'config' || is_dir($dst))) {
+        copyDirectory($src, $dst, false);
+    }
+}
+
+copy($sourceRoot . DIRECTORY_SEPARATOR . 'zero', __DIR__ . DIRECTORY_SEPARATOR . 'zero');
+
+echo "✅ Update Zero PHP Framework completed ({$commit})\n";

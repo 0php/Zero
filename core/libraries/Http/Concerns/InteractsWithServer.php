@@ -283,20 +283,105 @@ trait InteractsWithServer
         return $this->rawBody;
     }
 
+    /**
+     * The client IP address. Forwarding headers (X-Forwarded-For) are only honoured when the
+     * direct peer (REMOTE_ADDR) is listed in TRUSTED_PROXIES (comma separated IPs/CIDRs, or "*").
+     */
     public function ip(): ?string
     {
-        $keys = ['HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
+        $remote = $this->server['REMOTE_ADDR'] ?? null;
+        $remote = is_string($remote) && trim($remote) !== '' ? trim($remote) : null;
 
-        foreach ($keys as $key) {
-            if (!empty($this->server[$key])) {
-                $value = $this->server[$key];
-                if (is_string($value)) {
-                    return explode(',', $value)[0];
-                }
+        if ($remote === null) {
+            return null;
+        }
+
+        $trusted = $this->trustedProxies();
+
+        if ($trusted === [] || !$this->ipInList($remote, $trusted)) {
+            return $remote;
+        }
+
+        $forwarded = $this->server['HTTP_X_FORWARDED_FOR'] ?? '';
+        $chain = is_string($forwarded) ? array_map('trim', explode(',', $forwarded)) : [];
+
+        // Walk from the closest hop outwards and return the first address that is not a trusted proxy.
+        foreach (array_reverse($chain) as $candidate) {
+            if (filter_var($candidate, FILTER_VALIDATE_IP) === false) {
+                break;
+            }
+
+            if (!$this->ipInList($candidate, $trusted)) {
+                return $candidate;
+            }
+
+            $remote = $candidate;
+        }
+
+        return $remote;
+    }
+
+    /**
+     * @return string[]
+     */
+    protected function trustedProxies(): array
+    {
+        $value = function_exists('env') ? env('TRUSTED_PROXIES', '') : (getenv('TRUSTED_PROXIES') ?: '');
+
+        if (is_array($value)) {
+            return array_values(array_filter(array_map('trim', $value)));
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', (string) $value))));
+    }
+
+    /**
+     * @param string[] $list
+     */
+    protected function ipInList(string $ip, array $list): bool
+    {
+        foreach ($list as $entry) {
+            if ($entry === '*' || $entry === $ip || $this->ipInCidr($ip, $entry)) {
+                return true;
             }
         }
 
-        return null;
+        return false;
+    }
+
+    protected function ipInCidr(string $ip, string $cidr): bool
+    {
+        if (!str_contains($cidr, '/')) {
+            return false;
+        }
+
+        [$subnet, $bits] = explode('/', $cidr, 2);
+        $ipBin = @inet_pton($ip);
+        $subnetBin = @inet_pton($subnet);
+
+        if ($ipBin === false || $subnetBin === false || strlen($ipBin) !== strlen($subnetBin) || !ctype_digit($bits)) {
+            return false;
+        }
+
+        $bits = (int) $bits;
+        $bytes = intdiv($bits, 8);
+        $remainder = $bits % 8;
+
+        if ($bits > strlen($ipBin) * 8) {
+            return false;
+        }
+
+        if (strncmp($ipBin, $subnetBin, $bytes) !== 0) {
+            return false;
+        }
+
+        if ($remainder === 0) {
+            return true;
+        }
+
+        $mask = chr((0xFF << (8 - $remainder)) & 0xFF);
+
+        return (ord($ipBin[$bytes]) & ord($mask)) === (ord($subnetBin[$bytes]) & ord($mask));
     }
 
     protected function isSecure(): bool

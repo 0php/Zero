@@ -59,6 +59,7 @@ cn:
                 <h1 class="mb-0">{{ $title ?? __('title') }}</h1>
                 @if ($authUser)
                     <form method="POST" action="{{ route('auth.logout') }}" class="d-flex align-items-center gap-3">
+                        <input type="hidden" name="_token" value="{{ csrf_token() }}">
                         <span class="text-muted">
                             @t('greeting', ['name' => $authUser->name])
                         </span>

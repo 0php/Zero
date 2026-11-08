@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zero\Lib\Validation\Rules;
 
 use Zero\Lib\Filesystem\File;
+use Zero\Lib\Filesystem\MimeTypeMap;
 use Zero\Lib\Http\UploadedFile;
 use Zero\Lib\Validation\RuleInterface;
 
@@ -31,7 +32,8 @@ final class Image implements RuleInterface
 
         $mime = $this->resolveMimeType($value);
 
-        return $mime !== null && str_starts_with($mime, 'image/');
+        // SVG is excluded: it can carry script and is not a raster image.
+        return $mime !== null && str_starts_with($mime, 'image/') && $mime !== 'image/svg+xml';
     }
 
     public function message(): string
@@ -46,18 +48,15 @@ final class Image implements RuleInterface
 
     private function resolveMimeType(File $file): ?string
     {
-        if ($file instanceof UploadedFile) {
-            $clientMime = strtolower((string) $file->getClientMimeType());
+        // Always trust the file contents, never the client supplied Content-Type.
+        $detected = MimeTypeMap::detect($file->getPath());
 
-            if ($clientMime !== '') {
-                return $clientMime;
+        if ($detected === null) {
+            try {
+                $detected = strtolower((string) $file->getMimeType());
+            } catch (\Throwable) {
+                $detected = '';
             }
-        }
-
-        try {
-            $detected = strtolower((string) $file->getMimeType());
-        } catch (\Throwable) {
-            $detected = '';
         }
 
         return $detected !== '' ? $detected : null;

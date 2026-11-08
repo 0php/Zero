@@ -89,6 +89,7 @@ cn:
             </div>
 
             <form method="POST" action="{{ route('auth.logout') }}" class="d-inline">
+                <input type="hidden" name="_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-outline-secondary">@t('logout')</button>
             </form>
             <a href="{{ route('home') }}" class="btn btn-link">@t('back_home')</a>

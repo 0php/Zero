@@ -171,9 +171,15 @@ $user->getKey(); // 42
 ```
 
 ### `->fill(array $attributes): static`
-Mass-assign respecting `$fillable`.
+Mass-assign respecting `$fillable`. Keys not listed in `$fillable` are silently dropped.
 ```php
 $user->fill(['name' => 'Tofik', 'email' => 'a@b'])->save();
+```
+
+A model with an empty `$fillable` accepts **no** mass-assigned attributes (`$guarded = ['*']` by default). To allow every column except a few, opt out explicitly:
+```php
+protected array $fillable = [];
+protected array $guarded = ['id', 'is_admin'];
 ```
 
 ### `->forceFill(array $attributes): static`
@@ -426,7 +432,7 @@ $bindings = User::query()->where('active', 1)->getBindings();
 
 - **Table name**: `static $table` (defaults to plural snake-case of the class).
 - **Primary key**: `static $primaryKey = 'id'`.
-- **Mass assignment**: `static $fillable = [...]`.
+- **Mass assignment**: `$fillable = [...]` whitelist; empty means nothing is mass assignable unless `$guarded` is relaxed.
 - **Hidden attributes**: `static $hidden = [...]` (omitted from `toArray`/JSON).
 - **Casts**: `static $casts = ['payload' => 'array']`.
 - **Timestamps**: `static $timestamps = true` enables `created_at`/`updated_at` auto-fill.

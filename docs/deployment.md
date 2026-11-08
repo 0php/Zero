@@ -58,6 +58,15 @@ server {
         try_files $uri $uri/ /index.php?$query_string;
     }
 
+    # User uploads: never execute scripts, and sandbox anything a browser could render as a page.
+    # Must come before the generic \.php$ block.
+    location ^~ /storage/ {
+        location ~* \.(php\d?|phtml|pht|phar|phps|inc|cgi|pl|py|sh|shtml)(\.|$) { deny all; }
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Content-Security-Policy "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox" always;
+        try_files $uri =404;
+    }
+
     location ~ \.php$ {
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:/run/php/php8.2-fpm.sock;
@@ -70,6 +79,8 @@ server {
     }
 }
 ```
+
+Behind a reverse proxy or load balancer, set `TRUSTED_PROXIES` (e.g. `127.0.0.1` or the proxy's CIDR) so `Request::ip()` reads `X-Forwarded-For`; otherwise the header is ignored and the proxy address is used.
 
 Enable the site and reload Nginx:
 

@@ -5,6 +5,7 @@ namespace Zero\Lib\Http;
 
 use RuntimeException;
 use Zero\Lib\Filesystem\File;
+use Zero\Lib\Filesystem\MimeTypeMap;
 use Zero\Lib\Storage\Storage;
 
 final class UploadedFile extends File
@@ -25,9 +26,28 @@ final class UploadedFile extends File
         return $this->originalName;
     }
 
+    /**
+     * The MIME type sent by the client. Untrusted: use getDetectedMimeType() for security decisions.
+     */
     public function getClientMimeType(): string
     {
         return $this->mimeType;
+    }
+
+    /**
+     * The MIME type detected from the file contents.
+     */
+    public function getDetectedMimeType(): ?string
+    {
+        return MimeTypeMap::detect($this->path);
+    }
+
+    /**
+     * An extension consistent with the real file contents, safe to use in a stored file name.
+     */
+    public function getSafeExtension(): string
+    {
+        return MimeTypeMap::safeExtension($this->path, $this->getClientExtension());
     }
 
     public function getError(): int
@@ -94,8 +114,8 @@ final class UploadedFile extends File
     {
         $extension = parent::getExtension();
 
-        if ($extension === '') {
-            $extension = $this->getClientExtension();
+        if ($extension === '' || MimeTypeMap::isExecutable($extension) || MimeTypeMap::isActiveContent($extension)) {
+            $extension = $this->getSafeExtension();
         }
 
         return strtolower($extension);

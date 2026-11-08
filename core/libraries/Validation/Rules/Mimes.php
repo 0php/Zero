@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Zero\Lib\Validation\Rules;
 
 use Zero\Lib\Filesystem\File;
+use Zero\Lib\Filesystem\MimeTypeMap;
 use Zero\Lib\Http\UploadedFile;
 use Zero\Lib\Validation\RuleInterface;
 
@@ -33,9 +34,7 @@ final class Mimes implements RuleInterface
             return false;
         }
 
-        $extension = $this->resolveExtension($value);
-
-        return $extension !== null && in_array($extension, $this->extensions, true);
+        return array_intersect($this->resolveExtensions($value), $this->extensions) !== [];
     }
 
     public function message(): string
@@ -48,26 +47,38 @@ final class Mimes implements RuleInterface
         return ['types' => implode(', ', $this->extensions)];
     }
 
-    private function resolveExtension(File $file): ?string
+    /**
+     * Extensions the file may legitimately have, derived from its detected content. The client
+     * extension only counts for generic/unknown content types and when it is harmless.
+     *
+     * @return string[]
+     */
+    private function resolveExtensions(File $file): array
     {
-        $extension = null;
+        $mime = MimeTypeMap::detect($file->getPath());
+        $fromContent = MimeTypeMap::extensionsFor($mime);
 
-        if ($file instanceof UploadedFile) {
-            $clientExtension = strtolower((string) $file->getClientExtension());
+        $extension = $file instanceof UploadedFile
+            ? strtolower((string) $file->getClientExtension())
+            : strtolower((string) $file->getExtension());
 
-            if ($clientExtension !== '') {
-                $extension = $clientExtension;
-            }
+        // Generic content (plain text / unknown binary) may legitimately be .csv, .stl, .gcode...
+        if (MimeTypeMap::isGeneric($mime) && $extension !== '' && MimeTypeMap::isHarmless($extension)) {
+            return array_values(array_unique([...$fromContent, $extension]));
         }
 
-        if ($extension === null) {
-            $fileExtension = strtolower((string) $file->getExtension());
-
-            if ($fileExtension !== '') {
-                $extension = $fileExtension;
-            }
+        if ($fromContent !== []) {
+            return $fromContent;
         }
 
-        return $extension;
+        if ($extension === '' || !MimeTypeMap::isHarmless($extension)) {
+            return [];
+        }
+
+        if ($mime !== null && (str_contains($mime, 'php') || str_contains($mime, 'html') || str_contains($mime, 'script'))) {
+            return [];
+        }
+
+        return [$extension];
     }
 }

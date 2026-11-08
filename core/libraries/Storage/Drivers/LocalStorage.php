@@ -47,6 +47,11 @@ final class LocalStorage
     public function putFileAs(string $directory, File $file, string $name): string
     {
         $target = $this->fullPath(trim($directory, '/') . '/' . ltrim($name, '/'));
+
+        if ($file instanceof UploadedFile && $this->isExecutableName(basename($target))) {
+            throw new RuntimeException('Refusing to store an upload under an executable file name.');
+        }
+
         $this->ensureDirectory(dirname($target));
 
         if ($file instanceof UploadedFile) {
@@ -525,11 +530,43 @@ final class LocalStorage
         return $key;
     }
 
+    /**
+     * True when the final extension is server-executable, when a PHP extension appears anywhere
+     * in the name (shell.php.jpg on servers mapping handlers by any extension), or for .ht* / .user.ini.
+     */
+    private function isExecutableName(string $name): bool
+    {
+        $lower = strtolower($name);
+
+        if (str_starts_with($lower, '.ht') || $lower === '.user.ini') {
+            return true;
+        }
+
+        $parts = explode('.', $lower);
+        array_shift($parts);
+
+        if ($parts === []) {
+            return false;
+        }
+
+        if (\Zero\Lib\Filesystem\MimeTypeMap::isExecutable((string) end($parts))) {
+            return true;
+        }
+
+        foreach ($parts as $part) {
+            if (preg_match('/^(php\d?|phtml|pht|phar|phps)$/', $part) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function uniqueFileName(File $file): string
     {
         if ($file instanceof UploadedFile) {
             $name = $file->getClientFilename();
-            $extension = $file->getClientExtension();
+            $extension = $file->getSafeExtension();
         } else {
             $name = $file->getFilename();
             $extension = $file->getExtension();

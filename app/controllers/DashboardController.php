@@ -3,7 +3,7 @@
 namespace App\Controllers;
 
 use Zero\Lib\Http\Request;
-use Zero\Lib\Auth;
+use Zero\Lib\Auth\Auth;
 
 /**
  * Display the authenticated user's dashboard.

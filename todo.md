@@ -4,7 +4,7 @@
 
 - [x] Design authentication flow (login, logout, registration) leveraging `Session` and `Cookie` utilities
 - [x] Implement middleware for guarding routes and redirecting guests/authenticated users
-- [ ] Add CSRF protection hooks (token generation, verification, helper integration)
+- [x] Add CSRF protection hooks (token generation, verification, helper integration)
 - [ ] Document usage patterns and update examples/controllers accordingly
 
 ## CLI Tooling

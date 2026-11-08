@@ -449,13 +449,19 @@ if (!function_exists('url')) {
 
 if (!function_exists('asset')) {
     /**
-     * Build a URL for a public asset.
+     * Build a URL for a public asset with automatic mtime cache-busting.
      */
     function asset(string $path): string
     {
-        // Root-relative so assets always load over the page's own scheme/host
-        // (avoids mixed-content blocking when the site is served via HTTPS proxy).
-        return '/' . ltrim($path, '/');
+        $cleanPath = '/' . ltrim($path, '/');
+        $basePath = $_ENV['BASE_PATH'] ?? dirname(__DIR__, 2);
+        $publicFile = $basePath . '/public/' . ltrim($path, '/');
+
+        if (file_exists($publicFile)) {
+            return $cleanPath . '?v=' . filemtime($publicFile);
+        }
+
+        return $cleanPath;
     }
 }
 

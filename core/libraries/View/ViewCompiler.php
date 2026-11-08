@@ -46,7 +46,7 @@ final class ViewCompiler
         // We detect HTML-attribute context by looking for = or > or / immediately after the directive.
         $zeroAttrs = [];
         $content = preg_replace_callback(
-            '/(?<=\s)@(scope|foreach|for|if|elseif|else|show|model|ref|cloak|hydrate|key|data)(?=\s*=\s*"|(?:\s*>|\s*\/>|\s+[@:a-z]))/i',
+            '/(?<=[^\S\r\n])@(scope|foreach|for|if|elseif|else|show|model|ref|cloak|hydrate|key|data)(?=[^\S\r\n]*=\s*"|(?:\s*>|\s*\/>|[^\S\r\n]+[@:a-z]))/i',
             function (array $m) use (&$zeroAttrs): string {
                 $key = '__ZERO_ATTR_' . count($zeroAttrs) . '__';
                 $zeroAttrs[$key] = '@' . $m[1];

@@ -145,6 +145,11 @@ class CookieSessionHandler implements SessionHandlerInterface, SessionUpdateTime
 
     private function queueCookie(string $value, int $expiresAt): void
     {
+        if (headers_sent()) {
+            Log::error('Cookie session write skipped: headers already sent');
+            return;
+        }
+
         $options = [
             'expires' => $expiresAt,
             'path' => $this->path,
@@ -165,6 +170,11 @@ class CookieSessionHandler implements SessionHandlerInterface, SessionUpdateTime
 
     private function forgetPayload(): void
     {
+        if (headers_sent()) {
+            unset($_COOKIE[$this->payloadCookieName]);
+            return;
+        }
+
         $options = [
             'expires' => time() - 3600,
             'path' => $this->path,

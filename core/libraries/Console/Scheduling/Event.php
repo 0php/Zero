@@ -128,6 +128,11 @@ abstract class Event
         return $this->everyHours(6, $minute);
     }
 
+    public function everyEightHours(int $minute = 0): static
+    {
+        return $this->everyHours(8, $minute);
+    }
+
     public function everyTwelveHours(int $minute = 0): static
     {
         return $this->everyHours(12, $minute);

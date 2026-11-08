@@ -76,14 +76,30 @@ class DatabaseSessionHandler implements SessionHandlerInterface, SessionUpdateTi
     public function write(string $id, string $data): bool
     {
         $now = date('Y-m-d H:i:s');
-        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
-        $agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+        $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+        $agent = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
 
         try {
-            // Use INSERT ... ON DUPLICATE KEY UPDATE to handle race conditions
-            // This prevents duplicate key errors when multiple requests try to create the same session
+            $connName = config('database.connection', 'mysql');
+            $driver = config("database.{$connName}.driver", 'mysql');
+
+            $sql = match ($driver) {
+                'sqlite', 'sqlite3' => sprintf(
+                    'INSERT INTO %s (id, payload, last_activity, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, last_activity = excluded.last_activity, ip_address = excluded.ip_address, user_agent = excluded.user_agent, updated_at = excluded.updated_at',
+                    $this->table
+                ),
+                'pgsql' => sprintf(
+                    'INSERT INTO %s (id, payload, last_activity, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload = EXCLUDED.payload, last_activity = EXCLUDED.last_activity, ip_address = EXCLUDED.ip_address, user_agent = EXCLUDED.user_agent, updated_at = EXCLUDED.updated_at',
+                    $this->table
+                ),
+                default => sprintf(
+                    'INSERT INTO %s (id, payload, last_activity, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE payload = VALUES(payload), last_activity = VALUES(last_activity), ip_address = VALUES(ip_address), user_agent = VALUES(user_agent), updated_at = VALUES(updated_at)',
+                    $this->table
+                ),
+            };
+
             Database::query(
-                sprintf('INSERT INTO %s (id, payload, last_activity, ip_address, user_agent, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE payload = VALUES(payload), last_activity = VALUES(last_activity), ip_address = VALUES(ip_address), user_agent = VALUES(user_agent), updated_at = VALUES(updated_at)', $this->table),
+                $sql,
                 null,
                 [$id, $data, $now, $ip, $agent, $now, $now],
                 'upsert'

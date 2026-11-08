@@ -236,6 +236,11 @@ HTML;
 if (!function_exists('zero_http_error_response')) {
     function zero_http_error_response(int $status, array $context = []): void
     {
+        if (headers_sent()) {
+            $msg = $context['message'] ?? 'Error ' . $status;
+            echo "<div style=\"background:#161b22;color:#f77669;padding:16px;border-radius:8px;font-family:sans-serif;\"><strong>Error {$status}:</strong> " . htmlspecialchars((string) $msg, ENT_QUOTES, 'UTF-8') . "</div>";
+            return;
+        }
         zero_build_error_response($status, $context)->send();
     }
 }
@@ -280,7 +285,9 @@ set_exception_handler(static function (\Throwable $e) use ($debug): void {
     ]);
 
     if ($debug && PHP_SAPI !== 'cli') {
-        http_response_code(500);
+        if (!headers_sent()) {
+            http_response_code(500);
+        }
         echo zero_render_exception_page($e);
         return;
     }

@@ -49,18 +49,19 @@ $key = $limiter->keyFor($request, $strategy, 'global');
 
 [$allowed, $remaining, $retryAfter, $resetAt] = $limiter->hit($key, $max, $decay);
 
-// Always attach rate limit headers
-header(($headersCfg['limit'] ?? 'X-RateLimit-Limit') . ': ' . $max, true);
-header(($headersCfg['remaining'] ?? 'X-RateLimit-Remaining') . ': ' . max(0, $remaining), true);
-header(($headersCfg['reset'] ?? 'X-RateLimit-Reset') . ': ' . $resetAt, true);
+if (!headers_sent()) {
+    header(($headersCfg['limit'] ?? 'X-RateLimit-Limit') . ': ' . $max, true);
+    header(($headersCfg['remaining'] ?? 'X-RateLimit-Remaining') . ': ' . max(0, $remaining), true);
+    header(($headersCfg['reset'] ?? 'X-RateLimit-Reset') . ': ' . $resetAt, true);
 
-if (!$allowed) {
-    header(($headersCfg['retry_after'] ?? 'Retry-After') . ': ' . $retryAfter, true);
-    
-    $response = Response::json([
-        'message' => 'Too Many Requests.',
-    ], 429);
-    
-    $response->send();
-    exit;
+    if (!$allowed) {
+        header(($headersCfg['retry_after'] ?? 'Retry-After') . ': ' . $retryAfter, true);
+        
+        $response = Response::json([
+            'message' => 'Too Many Requests.',
+        ], 429);
+        
+        $response->send();
+        exit;
+    }
 }

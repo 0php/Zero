@@ -1,5 +1,9 @@
 <?php
 
+if (!empty($_ENV['APP_TIMEZONE']) && in_array($_ENV['APP_TIMEZONE'], timezone_identifiers_list(), true)) {
+    date_default_timezone_set($_ENV['APP_TIMEZONE']);
+}
+
 // Include Composer's autoloader if present so third-party packages are available.
 $composerAutoload = base('vendor/autoload.php');
 if (file_exists($composerAutoload)) {

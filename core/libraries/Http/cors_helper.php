@@ -33,6 +33,10 @@ if (!function_exists('cors_emit_headers')) {
      */
     function cors_emit_headers(string $origin, ?string $requestHeaders): void
     {
+        if (headers_sent()) {
+            return;
+        }
+
         $allowed = cors_allowed_origins();
 
         if ($origin !== '' && in_array($origin, $allowed, true)) {

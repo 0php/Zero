@@ -220,10 +220,16 @@ class Response
 
     public function send(): void
     {
-        http_response_code($this->status);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
 
-        foreach ($this->getHeaders() as $name => $value) {
-            header($name . ': ' . $value, true);
+        if (!headers_sent()) {
+            @http_response_code($this->status);
+
+            foreach ($this->getHeaders() as $name => $value) {
+                header($name . ': ' . $value, true);
+            }
         }
 
         $this->outputContent();
